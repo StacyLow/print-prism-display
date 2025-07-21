@@ -1,3 +1,4 @@
+
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -69,6 +70,14 @@ app.post('/api/test-connection', async (req, res) => {
     console.log('Executing test query...');
     const result = await testPool.query('SELECT 1 as test');
     console.log('Test query result:', result.rows);
+    
+    // Test if print_data table exists
+    try {
+      const tableCheck = await testPool.query('SELECT COUNT(*) FROM print_data LIMIT 1');
+      console.log('print_data table accessible:', tableCheck.rows[0].count);
+    } catch (tableError) {
+      console.warn('print_data table check failed:', tableError.message);
+    }
     
     console.log('Closing test pool...');
     await testPool.end();
@@ -142,7 +151,7 @@ app.post('/api/filament-types', async (req, res) => {
       pool = createPool(config);
     }
     
-    const result = await pool.query('SELECT DISTINCT filament_type FROM print_jobs ORDER BY filament_type');
+    const result = await pool.query('SELECT DISTINCT filament_type FROM print_data ORDER BY filament_type');
     const types = result.rows.map(row => row.filament_type);
     console.log('Filament types fetched:', types);
     
@@ -177,7 +186,7 @@ app.post('/api/printers', async (req, res) => {
       pool = createPool(config);
     }
     
-    const result = await pool.query('SELECT DISTINCT printer_name FROM print_jobs ORDER BY printer_name');
+    const result = await pool.query('SELECT DISTINCT printer_name FROM print_data ORDER BY printer_name');
     const printers = result.rows.map(row => row.printer_name);
     console.log('Printers fetched:', printers);
     
@@ -211,6 +220,8 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
-app.listen(port, () => {
-  console.log(`Backend API server running on port ${port}`);
+// Bind to all network interfaces (0.0.0.0) to make it accessible from network
+app.listen(port, '0.0.0.0', () => {
+  console.log(`Backend API server running on 0.0.0.0:${port}`);
+  console.log(`Health check: http://localhost:${port}/health`);
 });

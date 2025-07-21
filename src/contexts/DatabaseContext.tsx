@@ -22,6 +22,16 @@ export const useDatabaseContext = () => {
   return context;
 };
 
+// Get the API base URL for production
+const getApiBaseUrl = (): string => {
+  // In production, we need to use the backend port directly
+  if (import.meta.env.PROD) {
+    return `${window.location.protocol}//${window.location.hostname}:3001`;
+  }
+  // In development, use the proxy
+  return '';
+};
+
 export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [config, setConfigState] = useState<DatabaseConfig>(defaultDatabaseConfig);
   const [connectionStatus, setConnectionStatus] = useState<DatabaseConnectionStatus>({ isConnected: false });
@@ -61,8 +71,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     try {
-      console.log('Making request to /api/test-connection...');
-      const response = await fetch('/api/test-connection', {
+      const apiBaseUrl = getApiBaseUrl();
+      const url = `${apiBaseUrl}/api/test-connection`;
+      
+      console.log('Making request to:', url);
+      const response = await fetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

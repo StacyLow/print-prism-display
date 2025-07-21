@@ -33,7 +33,7 @@ const convertDatabaseRowToPrintJob = (row: DatabaseRow): PrintJob => {
 
 // Build SQL query with filters
 const buildFilteredQuery = (filters: FilterState): { query: string; params: any[] } => {
-  let query = 'SELECT * FROM print_jobs WHERE 1=1';
+  let query = 'SELECT * FROM print_data WHERE 1=1';
   const params: any[] = [];
   let paramIndex = 1;
 
@@ -76,6 +76,16 @@ const buildFilteredQuery = (filters: FilterState): { query: string; params: any[
 
   query += ' ORDER BY print_start DESC';
   return { query, params };
+};
+
+// Get the API base URL for production
+const getApiBaseUrl = (): string => {
+  // In production, we need to use the backend port directly
+  if (import.meta.env.PROD) {
+    return `${window.location.protocol}//${window.location.hostname}:3001`;
+  }
+  // In development, use the proxy
+  return '';
 };
 
 // Utility function to safely read and parse JSON responses
@@ -125,9 +135,11 @@ export const fetchPrintJobsFromDatabase = async (
     console.log('Executing query:', query);
     console.log('Query parameters:', params);
     
-    // Make HTTP request to backend API that will execute the PostgreSQL query
-    console.log('Making request to /api/print-jobs...');
-    const response = await fetch('/api/print-jobs', {
+    const apiBaseUrl = getApiBaseUrl();
+    const url = `${apiBaseUrl}/api/print-jobs`;
+    
+    console.log('Making request to:', url);
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -184,7 +196,10 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
   console.log('Fetching filament types from database...');
   
   try {
-    const response = await fetch('/api/filament-types', {
+    const apiBaseUrl = getApiBaseUrl();
+    const url = `${apiBaseUrl}/api/filament-types`;
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -219,7 +234,10 @@ export const fetchPrintersFromDatabase = async (config: DatabaseConfig): Promise
   console.log('Fetching printers from database...');
   
   try {
-    const response = await fetch('/api/printers', {
+    const apiBaseUrl = getApiBaseUrl();
+    const url = `${apiBaseUrl}/api/printers`;
+    
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
