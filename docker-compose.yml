@@ -17,8 +17,6 @@ services:
       - VITE_DB_USER=${DB_USER:-postgres}
       - VITE_DB_PASSWORD=${DB_PASSWORD}
       - VITE_DB_SSL=${DB_SSL:-false}
-    networks:
-      - printer-network
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -39,8 +37,6 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
-    networks:
-      - printer-network
     restart: unless-stopped
     profiles:
       - nginx
