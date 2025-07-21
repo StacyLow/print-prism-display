@@ -143,7 +143,7 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
     const data = await response.json();
     
     // Normalize PET to PETG and remove duplicates
-    const types = data.types.map((type: string) => type === 'PET' ? 'PETG' : type);
+    const types = (data.types as string[]).map((type: string) => type === 'PET' ? 'PETG' : type);
     return [...new Set(types)].sort();
     
   } catch (error) {
