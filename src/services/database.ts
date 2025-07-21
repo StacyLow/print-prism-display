@@ -1,4 +1,3 @@
-
 import { DatabaseConfig } from '@/types/database';
 import { PrintJob, FilterState } from '@/types/printJob';
 
@@ -79,12 +78,31 @@ const buildFilteredQuery = (filters: FilterState): { query: string; params: any[
   return { query, params };
 };
 
+// Utility function to validate and parse JSON responses
+const parseJsonResponse = async (response: Response) => {
+  const contentType = response.headers.get('content-type');
+  
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await response.text();
+    console.error('Non-JSON response received:', {
+      status: response.status,
+      statusText: response.statusText,
+      contentType,
+      body: text.substring(0, 200) + (text.length > 200 ? '...' : '')
+    });
+    throw new Error(`Server returned non-JSON response (${response.status}): ${response.statusText}`);
+  }
+  
+  return await response.json();
+};
+
 // Execute database query
 export const fetchPrintJobsFromDatabase = async (
   config: DatabaseConfig,
   filters: FilterState
 ): Promise<PrintJob[]> => {
   console.log('Fetching data from PostgreSQL database...');
+  console.log('Database config:', { ...config, password: '***' });
   
   try {
     const { query, params } = buildFilteredQuery(filters);
@@ -104,11 +122,16 @@ export const fetchPrintJobsFromDatabase = async (
       }),
     });
 
+    console.log('Print jobs API response status:', response.status);
+
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Print jobs API failed:', errorText);
       throw new Error(`Database query failed: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await parseJsonResponse(response);
+    console.log('Print jobs API response data:', data);
     
     if (!data.success) {
       throw new Error(data.error || 'Database query failed');
@@ -127,6 +150,8 @@ export const fetchPrintJobsFromDatabase = async (
 
 // Get available filament types from database
 export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Promise<string[]> => {
+  console.log('Fetching filament types from database...');
+  
   try {
     const response = await fetch('/api/filament-types', {
       method: 'POST',
@@ -136,11 +161,16 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
       body: JSON.stringify({ config }),
     });
 
+    console.log('Filament types API response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch filament types: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Filament types API failed:', errorText);
+      throw new Error(`Failed to fetch filament types: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await parseJsonResponse(response);
+    console.log('Filament types API response data:', data);
     
     // Normalize PET to PETG and remove duplicates
     const types = (data.types as string[]).map((type: string) => type === 'PET' ? 'PETG' : type);
@@ -155,6 +185,8 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
 
 // Get available printers from database
 export const fetchPrintersFromDatabase = async (config: DatabaseConfig): Promise<string[]> => {
+  console.log('Fetching printers from database...');
+  
   try {
     const response = await fetch('/api/printers', {
       method: 'POST',
@@ -164,11 +196,17 @@ export const fetchPrintersFromDatabase = async (config: DatabaseConfig): Promise
       body: JSON.stringify({ config }),
     });
 
+    console.log('Printers API response status:', response.status);
+
     if (!response.ok) {
-      throw new Error(`Failed to fetch printers: ${response.status}`);
+      const errorText = await response.text();
+      console.error('Printers API failed:', errorText);
+      throw new Error(`Failed to fetch printers: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
+    const data = await parseJsonResponse(response);
+    console.log('Printers API response data:', data);
+    
     return data.printers.sort();
     
   } catch (error) {
