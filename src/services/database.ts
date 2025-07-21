@@ -80,20 +80,37 @@ const buildFilteredQuery = (filters: FilterState): { query: string; params: any[
 
 // Utility function to validate and parse JSON responses
 const parseJsonResponse = async (response: Response) => {
+  console.log('Parsing response:', {
+    status: response.status,
+    statusText: response.statusText,
+    contentType: response.headers.get('content-type')
+  });
+
   const contentType = response.headers.get('content-type');
   
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await response.text();
-    console.error('Non-JSON response received:', {
-      status: response.status,
-      statusText: response.statusText,
-      contentType,
-      body: text.substring(0, 200) + (text.length > 200 ? '...' : '')
-    });
-    throw new Error(`Server returned non-JSON response (${response.status}): ${response.statusText}`);
+  // Get the raw response text first
+  const responseText = await response.text();
+  console.log('Raw response text:', responseText);
+  
+  if (!responseText.trim()) {
+    throw new Error('Empty response received from server');
   }
   
-  return await response.json();
+  // Try to parse as JSON regardless of content-type (some servers may not set it correctly)
+  try {
+    const data = JSON.parse(responseText);
+    console.log('Successfully parsed JSON:', data);
+    return data;
+  } catch (parseError) {
+    console.error('JSON parsing failed:', parseError);
+    console.error('Response text that failed to parse:', responseText);
+    
+    if (!contentType || !contentType.includes('application/json')) {
+      throw new Error(`Server returned non-JSON response (${response.status}): ${responseText.substring(0, 200)}`);
+    } else {
+      throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}`);
+    }
+  }
 };
 
 // Execute database query
@@ -101,7 +118,7 @@ export const fetchPrintJobsFromDatabase = async (
   config: DatabaseConfig,
   filters: FilterState
 ): Promise<PrintJob[]> => {
-  console.log('Fetching data from PostgreSQL database...');
+  console.log('=== FETCHING PRINT JOBS FROM DATABASE ===');
   console.log('Database config:', { ...config, password: '***' });
   
   try {
@@ -110,6 +127,7 @@ export const fetchPrintJobsFromDatabase = async (
     console.log('Query parameters:', params);
     
     // Make HTTP request to backend API that will execute the PostgreSQL query
+    console.log('Making request to /api/print-jobs...');
     const response = await fetch('/api/print-jobs', {
       method: 'POST',
       headers: {
@@ -125,9 +143,17 @@ export const fetchPrintJobsFromDatabase = async (
     console.log('Print jobs API response status:', response.status);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Print jobs API failed:', errorText);
-      throw new Error(`Database query failed: ${response.status} ${response.statusText}`);
+      console.error('Print jobs API failed with status:', response.status);
+      
+      let errorMessage = `Database query failed: ${response.status} ${response.statusText}`;
+      try {
+        const errorData = await parseJsonResponse(response);
+        errorMessage = errorData.error || errorMessage;
+      } catch (parseError) {
+        console.error('Failed to parse error response:', parseError);
+      }
+      
+      throw new Error(errorMessage);
     }
 
     const data = await parseJsonResponse(response);

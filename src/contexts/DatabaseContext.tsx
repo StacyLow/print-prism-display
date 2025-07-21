@@ -46,9 +46,11 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   };
 
   const testConnection = async (): Promise<boolean> => {
-    console.log('Testing database connection with config:', config);
+    console.log('=== TESTING DATABASE CONNECTION ===');
+    console.log('Testing database connection with config:', { ...config, password: '***' });
     
     try {
+      console.log('Making request to /api/test-connection...');
       const response = await fetch('/api/test-connection', {
         method: 'POST',
         headers: {
@@ -57,37 +59,73 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         body: JSON.stringify({ config }),
       });
 
-      console.log('Test connection response status:', response.status);
+      console.log('Response received:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Test connection failed - response not ok:', errorText);
+        console.error('Response not OK:', response.status, response.statusText);
+        
+        // Try to get error details
+        let errorMessage = `Connection failed: ${response.status} ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response as JSON:', parseError);
+          const errorText = await response.text();
+          console.error('Raw error response:', errorText);
+          errorMessage = `Server error: ${errorText.substring(0, 100)}`;
+        }
+        
         setConnectionStatus({ 
           isConnected: false, 
           lastTested: new Date(), 
-          error: `Connection failed: ${response.status} ${response.statusText}` 
+          error: errorMessage
         });
         return false;
       }
 
+      // Check content type
       const contentType = response.headers.get('content-type');
+      console.log('Response content-type:', contentType);
+      
       if (!contentType || !contentType.includes('application/json')) {
-        console.error('Test connection failed - not JSON response:', contentType);
+        console.warn('Non-JSON response detected, attempting to parse anyway...');
+      }
+
+      let data;
+      try {
+        const responseText = await response.text();
+        console.log('Raw response text:', responseText);
+        
+        if (!responseText.trim()) {
+          throw new Error('Empty response received');
+        }
+        
+        data = JSON.parse(responseText);
+        console.log('Parsed response data:', data);
+      } catch (parseError) {
+        console.error('JSON parsing failed:', parseError);
+        const responseText = await response.text();
+        console.error('Response that failed to parse:', responseText);
+        
         setConnectionStatus({ 
           isConnected: false, 
           lastTested: new Date(), 
-          error: 'Server returned non-JSON response' 
+          error: `Invalid response format. Expected JSON but got: ${responseText.substring(0, 100)}` 
         });
         return false;
       }
-
-      const data = await response.json();
-      console.log('Test connection response data:', data);
       
       if (data.success) {
+        console.log('Connection test successful!');
         setConnectionStatus({ isConnected: true, lastTested: new Date() });
         return true;
       } else {
+        console.log('Connection test failed:', data.error);
         setConnectionStatus({ 
           isConnected: false, 
           lastTested: new Date(), 
@@ -96,7 +134,7 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return false;
       }
     } catch (error) {
-      console.error('Test connection error:', error);
+      console.error('Connection test error:', error);
       setConnectionStatus({ 
         isConnected: false, 
         lastTested: new Date(), 

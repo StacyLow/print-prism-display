@@ -1,4 +1,3 @@
-
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
@@ -13,6 +12,7 @@ app.use(express.json());
 // Error handling middleware to ensure JSON responses
 app.use((err, req, res, next) => {
   console.error('Express error:', err);
+  res.setHeader('Content-Type', 'application/json');
   res.status(500).json({
     success: false,
     error: err.message || 'Internal server error'
@@ -36,35 +36,53 @@ const createPool = (config) => {
 
 // Health check endpoint
 app.get('/health', (req, res) => {
+  res.setHeader('Content-Type', 'application/json');
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Test database connection
 app.post('/api/test-connection', async (req, res) => {
+  console.log('=== TEST CONNECTION REQUEST ===');
+  console.log('Headers:', req.headers);
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  
+  // Ensure JSON response header is set
+  res.setHeader('Content-Type', 'application/json');
+  
   try {
     const { config } = req.body;
     console.log('Testing connection with config:', { ...config, password: '***' });
     
     if (!config || !config.host || !config.database || !config.username || !config.password) {
+      console.log('Missing required fields in config');
       return res.status(400).json({ 
         success: false, 
         error: 'Missing required database configuration fields' 
       });
     }
     
+    console.log('Creating test pool...');
     const testPool = createPool(config);
     
-    await testPool.query('SELECT 1');
+    console.log('Executing test query...');
+    const result = await testPool.query('SELECT 1 as test');
+    console.log('Test query result:', result.rows);
+    
+    console.log('Closing test pool...');
     await testPool.end();
     
     console.log('Database connection test successful');
-    res.json({ success: true, message: 'Connection successful' });
+    const response = { success: true, message: 'Connection successful' };
+    console.log('Sending response:', response);
+    res.json(response);
   } catch (error) {
     console.error('Connection test failed:', error);
-    res.status(500).json({ 
+    const errorResponse = { 
       success: false, 
       error: error.message 
-    });
+    };
+    console.log('Sending error response:', errorResponse);
+    res.status(500).json(errorResponse);
   }
 });
 
