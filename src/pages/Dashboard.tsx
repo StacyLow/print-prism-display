@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,8 @@ import {
   CheckCircle, 
   BarChart3, 
   Timer,
-  ArrowLeft 
+  ArrowLeft,
+  Settings as SettingsIcon
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -77,6 +79,12 @@ export default function Dashboard() {
                 <p className="text-muted-foreground">Monitor your printing metrics and performance</p>
               </div>
             </div>
+            <Link to="/settings">
+              <Button variant="outline" size="sm">
+                <SettingsIcon className="h-4 w-4 mr-2" />
+                Settings
+              </Button>
+            </Link>
           </div>
         </div>
       </div>
