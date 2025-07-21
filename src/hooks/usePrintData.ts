@@ -1,20 +1,37 @@
+
 import { useQuery } from '@tanstack/react-query';
-import { PrintJob, MetricData, ChartData, FilterState } from '@/types/printJob';
+import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 
 // Mock data for development - replace with actual API calls
 const generateMockData = (count: number): PrintJob[] => {
   const filamentTypes = ['PLA', 'ABS', 'PETG', 'TPU', 'WOOD'];
   const printers = ['Printer A', 'Printer B', 'Printer C', 'Printer D'];
-  const statuses: PrintJob['status'][] = ['success', 'failed', 'cancelled'];
+  const statuses: PrintJob['status'][] = ['completed', 'cancelled', 'in_progress', 'interrupted', 'server_exit', 'klippy_shutdown'];
+  
+  // Status distribution weights (70% completed, 15% cancelled, 5% interrupted, 5% in_progress, 3% server_exit, 2% klippy_shutdown)
+  const statusWeights = [0.7, 0.15, 0.05, 0.05, 0.03, 0.02];
   
   return Array.from({ length: count }, (_, i) => {
     const start = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000);
     const duration = Math.random() * 300 + 30; // 30-330 minutes
     const end = new Date(start.getTime() + duration * 60 * 1000);
     
+    // Select status based on weights
+    const rand = Math.random();
+    let cumulative = 0;
+    let selectedStatus = statuses[0];
+    
+    for (let j = 0; j < statusWeights.length; j++) {
+      cumulative += statusWeights[j];
+      if (rand <= cumulative) {
+        selectedStatus = statuses[j];
+        break;
+      }
+    }
+    
     return {
       filename: `model_${i + 1}.gcode`,
-      status: Math.random() > 0.15 ? 'success' : statuses[Math.floor(Math.random() * statuses.length)],
+      status: selectedStatus,
       total_duration: duration,
       filament_total: Math.random() * 100 + 10, // 10-110 meters
       filament_type: filamentTypes[Math.floor(Math.random() * filamentTypes.length)],
@@ -53,15 +70,27 @@ const filterData = (data: PrintJob[], filters: FilterState): PrintJob[] => {
 };
 
 const calculateMetrics = (data: PrintJob[]): MetricData => {
-  const successfulJobs = data.filter(job => job.status === 'success');
+  const completedJobs = data.filter(job => isSuccessfulStatus(job.status));
+  const nonActiveJobs = data.filter(job => !isActiveStatus(job.status));
+  
+  // Status breakdown
+  const statusBreakdown = {
+    completed: data.filter(job => job.status === 'completed').length,
+    cancelled: data.filter(job => job.status === 'cancelled').length,
+    interrupted: data.filter(job => job.status === 'interrupted').length,
+    server_exit: data.filter(job => job.status === 'server_exit').length,
+    klippy_shutdown: data.filter(job => job.status === 'klippy_shutdown').length,
+    in_progress: data.filter(job => job.status === 'in_progress').length,
+  };
   
   return {
     totalPrintTime: data.reduce((sum, job) => sum + job.total_duration, 0),
-    totalFilamentLength: successfulJobs.reduce((sum, job) => sum + job.filament_total, 0),
-    totalFilamentWeight: successfulJobs.reduce((sum, job) => sum + job.filament_weight, 0),
-    successRate: data.length > 0 ? (successfulJobs.length / data.length) * 100 : 0,
+    totalFilamentLength: completedJobs.reduce((sum, job) => sum + job.filament_total, 0),
+    totalFilamentWeight: completedJobs.reduce((sum, job) => sum + job.filament_weight, 0),
+    successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
     totalJobs: data.length,
     avgPrintTime: data.length > 0 ? data.reduce((sum, job) => sum + job.total_duration, 0) / data.length : 0,
+    statusBreakdown,
   };
 };
 
@@ -90,7 +119,7 @@ export const usePrintMetrics = (filters: FilterState) => {
 export const useChartData = (filters: FilterState) => {
   const { data: jobs, ...query } = usePrintJobs(filters);
   
-  const chartData = jobs ? jobs.reduce((acc: Record<string, ChartData>, job) => {
+  const chartData = jobs ? jobs.filter(job => !isActiveStatus(job.status)).reduce((acc: Record<string, ChartData>, job) => {
     const date = new Date(job.print_start).toISOString().split('T')[0];
     
     if (!acc[date]) {
@@ -104,7 +133,7 @@ export const useChartData = (filters: FilterState) => {
     }
     
     acc[date].printTime += job.total_duration;
-    acc[date].filamentUsed += job.status === 'success' ? job.filament_total : 0;
+    acc[date].filamentUsed += isSuccessfulStatus(job.status) ? job.filament_total : 0;
     acc[date].jobCount += 1;
     
     return acc;
@@ -113,9 +142,9 @@ export const useChartData = (filters: FilterState) => {
   // Calculate success rates
   Object.keys(chartData).forEach(date => {
     const dayJobs = jobs?.filter(job => 
-      new Date(job.print_start).toISOString().split('T')[0] === date
+      new Date(job.print_start).toISOString().split('T')[0] === date && !isActiveStatus(job.status)
     ) || [];
-    const successCount = dayJobs.filter(job => job.status === 'success').length;
+    const successCount = dayJobs.filter(job => isSuccessfulStatus(job.status)).length;
     chartData[date].successRate = dayJobs.length > 0 ? (successCount / dayJobs.length) * 100 : 0;
   });
   

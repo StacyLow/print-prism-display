@@ -5,6 +5,7 @@ import { FilterPanel } from "@/components/dashboard/FilterPanel";
 import { MetricCard } from "@/components/dashboard/MetricCard";
 import { PrintTimeChart } from "@/components/dashboard/PrintTimeChart";
 import { FilamentUsageChart } from "@/components/dashboard/FilamentUsageChart";
+import { StatusBreakdownChart } from "@/components/dashboard/StatusBreakdownChart";
 import { usePrintMetrics, useChartData, useFilamentTypes, usePrinters } from "@/hooks/usePrintData";
 import { FilterState } from "@/types/printJob";
 import { 
@@ -140,18 +141,9 @@ export default function Dashboard() {
               <FilamentUsageChart data={chartData || []} isLoading={chartLoading} />
             </div>
 
-            {/* Additional Charts Row */}
+            {/* Status Analytics */}
             <div className="grid grid-cols-1 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Success Rate Trends</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="h-[200px] w-full flex items-center justify-center text-muted-foreground">
-                    Success rate chart coming soon...
-                  </div>
-                </CardContent>
-              </Card>
+              <StatusBreakdownChart data={metrics} isLoading={metricsLoading} />
             </div>
           </div>
         </div>
