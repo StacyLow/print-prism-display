@@ -1,6 +1,6 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
+import { useDatabaseContext } from '@/contexts/DatabaseContext';
 
 // Mock data for development - replace with actual API calls
 const generateMockData = (count: number): PrintJob[] => {
@@ -43,6 +43,21 @@ const generateMockData = (count: number): PrintJob[] => {
   });
 };
 
+// Function to fetch data from database
+const fetchDatabaseData = async (filters: FilterState): Promise<PrintJob[]> => {
+  // This would be replaced with actual database query
+  // For now, we'll simulate a database call that returns all available data
+  console.log('Fetching data from database with filters:', filters);
+  
+  // Simulate API delay
+  await new Promise(resolve => setTimeout(resolve, 500));
+  
+  // TODO: Replace with actual database query
+  // Example: const response = await fetch('/api/print-jobs', { ... });
+  // For now, return empty array since we don't have actual DB connection
+  return [];
+};
+
 const getDateRangeStart = (range: FilterState['dateRange']): Date => {
   const now = new Date();
   switch (range) {
@@ -70,8 +85,8 @@ const filterData = (data: PrintJob[], filters: FilterState): PrintJob[] => {
 };
 
 const calculateMetrics = (data: PrintJob[]): MetricData => {
-  const completedJobs = data.filter(job => isSuccessfulStatus(job.status));
-  const nonActiveJobs = data.filter(job => !isActiveStatus(job.status));
+  const completedJobs = data.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress');
+  const nonActiveJobs = data.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress');
   
   // Status breakdown
   const statusBreakdown = {
@@ -95,13 +110,31 @@ const calculateMetrics = (data: PrintJob[]): MetricData => {
 };
 
 export const usePrintJobs = (filters: FilterState) => {
+  const { connectionStatus, isUsingMockData } = useDatabaseContext();
+  
   return useQuery({
-    queryKey: ['printJobs', filters],
+    queryKey: ['printJobs', filters, connectionStatus.isConnected, isUsingMockData],
     queryFn: async () => {
-      // Simulate API delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      const mockData = generateMockData(150);
-      return filterData(mockData, filters);
+      console.log('Database connected:', connectionStatus.isConnected);
+      console.log('Using mock data:', isUsingMockData);
+      
+      // Use database data if connected and not using mock data
+      if (connectionStatus.isConnected && !isUsingMockData) {
+        try {
+          const databaseData = await fetchDatabaseData(filters);
+          return filterData(databaseData, filters);
+        } catch (error) {
+          console.error('Failed to fetch database data:', error);
+          // Fall back to mock data if database fetch fails
+          const mockData = generateMockData(150);
+          return filterData(mockData, filters);
+        }
+      } else {
+        // Use mock data
+        console.log('Using mock data - generating 150 entries');
+        const mockData = generateMockData(150);
+        return filterData(mockData, filters);
+      }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
@@ -119,7 +152,7 @@ export const usePrintMetrics = (filters: FilterState) => {
 export const useChartData = (filters: FilterState) => {
   const { data: jobs, ...query } = usePrintJobs(filters);
   
-  const chartData = jobs ? jobs.filter(job => !isActiveStatus(job.status)).reduce((acc: Record<string, ChartData>, job) => {
+  const chartData = jobs ? jobs.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress').reduce((acc: Record<string, ChartData>, job) => {
     const date = new Date(job.print_start).toISOString().split('T')[0];
     
     if (!acc[date]) {
@@ -133,18 +166,19 @@ export const useChartData = (filters: FilterState) => {
     }
     
     acc[date].printTime += job.total_duration;
-    acc[date].filamentUsed += isSuccessfulStatus(job.status) ? job.filament_total : 0;
+    // Include in_progress jobs in filament usage
+    acc[date].filamentUsed += (isSuccessfulStatus(job.status) || job.status === 'in_progress') ? job.filament_total : 0;
     acc[date].jobCount += 1;
     
     return acc;
   }, {}) : {};
   
-  // Calculate success rates
+  // Calculate success rates (treating in_progress as successful)
   Object.keys(chartData).forEach(date => {
     const dayJobs = jobs?.filter(job => 
-      new Date(job.print_start).toISOString().split('T')[0] === date && !isActiveStatus(job.status)
+      new Date(job.print_start).toISOString().split('T')[0] === date && (!isActiveStatus(job.status) || job.status === 'in_progress')
     ) || [];
-    const successCount = dayJobs.filter(job => isSuccessfulStatus(job.status)).length;
+    const successCount = dayJobs.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress').length;
     chartData[date].successRate = dayJobs.length > 0 ? (successCount / dayJobs.length) * 100 : 0;
   });
   
