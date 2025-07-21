@@ -23,7 +23,8 @@ FROM node:18-alpine AS production
 
 WORKDIR /app
 
-# Install serve globally for serving the built app
+# Install serve globally and curl for health checks
+RUN apk add --no-cache curl
 RUN npm install -g serve
 
 # Copy built application from build stage
