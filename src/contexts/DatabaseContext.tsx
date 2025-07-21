@@ -49,6 +49,17 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     console.log('=== TESTING DATABASE CONNECTION ===');
     console.log('Testing database connection with config:', { ...config, password: '***' });
     
+    // Check for empty credentials
+    if (!config.database || !config.username || !config.password) {
+      console.log('Empty credentials detected');
+      setConnectionStatus({ 
+        isConnected: false, 
+        lastTested: new Date(), 
+        error: 'Database credentials are required. Please fill in database name, username, and password.' 
+      });
+      return false;
+    }
+
     try {
       console.log('Making request to /api/test-connection...');
       const response = await fetch('/api/test-connection', {
@@ -78,6 +89,15 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           try {
             const errorData = JSON.parse(responseText);
             errorMessage = errorData.error || errorMessage;
+            
+            // Provide more helpful error messages for common issues
+            if (errorMessage.includes('ECONNREFUSED')) {
+              errorMessage = 'Connection refused. Please ensure PostgreSQL is running and accessible at the specified host and port.';
+            } else if (errorMessage.includes('authentication failed')) {
+              errorMessage = 'Authentication failed. Please check your username and password.';
+            } else if (errorMessage.includes('database') && errorMessage.includes('does not exist')) {
+              errorMessage = 'Database does not exist. Please create the database or check the database name.';
+            }
           } catch (parseError) {
             console.error('Failed to parse error response as JSON:', parseError);
             errorMessage = `Server error: ${responseText.substring(0, 100)}`;
@@ -135,10 +155,20 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
     } catch (error) {
       console.error('Connection test error:', error);
+      let errorMessage = 'Connection failed';
+      
+      if (error instanceof Error) {
+        if (error.message.includes('Failed to fetch')) {
+          errorMessage = 'Cannot connect to backend server. Please ensure the backend is running on port 3001.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
       setConnectionStatus({ 
         isConnected: false, 
         lastTested: new Date(), 
-        error: error instanceof Error ? error.message : 'Connection failed' 
+        error: errorMessage 
       });
       return false;
     }

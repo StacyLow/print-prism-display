@@ -16,7 +16,7 @@ export interface DatabaseConnectionStatus {
 }
 
 export const defaultDatabaseConfig: DatabaseConfig = {
-  host: 'localhost',
+  host: '127.0.0.1', // Use IPv4 explicitly to avoid ::1 issues
   port: 5432,
   database: '',
   username: '',

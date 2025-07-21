@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Database, TestTube, CheckCircle, AlertCircle, Settings as SettingsIcon } from "lucide-react";
+import { ArrowLeft, Database, TestTube, CheckCircle, AlertCircle, Settings as SettingsIcon, Info } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDatabaseContext } from "@/contexts/DatabaseContext";
 import { DatabaseConfig } from "@/types/database";
@@ -64,6 +64,8 @@ export default function Settings() {
     return date.toLocaleString();
   };
 
+  const hasEmptyCredentials = !formData.database || !formData.username || !formData.password;
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -115,8 +117,18 @@ export default function Settings() {
                   onCheckedChange={setIsUsingMockData}
                 />
               </div>
+
+              {hasEmptyCredentials && !isUsingMockData && (
+                <div className="flex items-start gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                  <Info className="h-4 w-4 text-yellow-600 mt-0.5" />
+                  <div className="text-sm">
+                    <p className="font-medium text-yellow-800">Database credentials required</p>
+                    <p className="text-yellow-700">Please fill in your PostgreSQL connection details below to connect to your database.</p>
+                  </div>
+                </div>
+              )}
               
-              {!isUsingMockData && (
+              {!isUsingMockData && !hasEmptyCredentials && (
                 <div className="flex items-center gap-2">
                   {connectionStatus.isConnected ? (
                     <CheckCircle className="h-4 w-4 text-green-600" />
@@ -154,10 +166,13 @@ export default function Settings() {
                   <Label htmlFor="host">Host</Label>
                   <Input
                     id="host"
-                    placeholder="localhost"
+                    placeholder="localhost or 127.0.0.1"
                     value={formData.host}
                     onChange={(e) => handleInputChange('host', e.target.value)}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Use 127.0.0.1 to force IPv4 connection
+                  </p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="port">Port</Label>
@@ -175,17 +190,20 @@ export default function Settings() {
                 <Label htmlFor="database">Database Name</Label>
                 <Input
                   id="database"
-                  placeholder="printer_dashboard"
+                  placeholder="your_database_name"
                   value={formData.database}
                   onChange={(e) => handleInputChange('database', e.target.value)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  The name of your PostgreSQL database
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="username">Username</Label>
                 <Input
                   id="username"
-                  placeholder="postgres"
+                  placeholder="your_username"
                   value={formData.username}
                   onChange={(e) => handleInputChange('username', e.target.value)}
                 />
@@ -205,7 +223,7 @@ export default function Settings() {
                 <Input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="••••••••"
+                  placeholder="your_password"
                   value={formData.password}
                   onChange={(e) => handleInputChange('password', e.target.value)}
                 />
@@ -249,13 +267,19 @@ export default function Settings() {
                 <Button 
                   variant="outline" 
                   onClick={handleTestConnection}
-                  disabled={isTestingConnection}
+                  disabled={isTestingConnection || hasEmptyCredentials}
                   className="flex items-center gap-2"
                 >
                   <TestTube className="h-4 w-4" />
                   {isTestingConnection ? "Testing..." : "Test Connection"}
                 </Button>
               </div>
+
+              {hasEmptyCredentials && (
+                <p className="text-xs text-muted-foreground">
+                  Fill in database name, username, and password to enable connection testing
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
