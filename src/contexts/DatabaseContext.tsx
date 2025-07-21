@@ -65,19 +65,23 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         headers: Object.fromEntries(response.headers.entries())
       });
 
+      // Read the response body once and store it
+      const responseText = await response.text();
+      console.log('Raw response text:', responseText);
+
       if (!response.ok) {
         console.error('Response not OK:', response.status, response.statusText);
         
-        // Try to get error details
+        // Use the already-read response text
         let errorMessage = `Connection failed: ${response.status} ${response.statusText}`;
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || errorMessage;
-        } catch (parseError) {
-          console.error('Failed to parse error response as JSON:', parseError);
-          const errorText = await response.text();
-          console.error('Raw error response:', errorText);
-          errorMessage = `Server error: ${errorText.substring(0, 100)}`;
+        if (responseText.trim()) {
+          try {
+            const errorData = JSON.parse(responseText);
+            errorMessage = errorData.error || errorMessage;
+          } catch (parseError) {
+            console.error('Failed to parse error response as JSON:', parseError);
+            errorMessage = `Server error: ${responseText.substring(0, 100)}`;
+          }
         }
         
         setConnectionStatus({ 
@@ -88,34 +92,30 @@ export const DatabaseProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         return false;
       }
 
-      // Check content type
-      const contentType = response.headers.get('content-type');
-      console.log('Response content-type:', contentType);
-      
-      if (!contentType || !contentType.includes('application/json')) {
-        console.warn('Non-JSON response detected, attempting to parse anyway...');
+      // Check if we have a response body
+      if (!responseText.trim()) {
+        console.error('Empty response received');
+        setConnectionStatus({ 
+          isConnected: false, 
+          lastTested: new Date(), 
+          error: 'Empty response received from server'
+        });
+        return false;
       }
 
+      // Try to parse the response as JSON
       let data;
       try {
-        const responseText = await response.text();
-        console.log('Raw response text:', responseText);
-        
-        if (!responseText.trim()) {
-          throw new Error('Empty response received');
-        }
-        
         data = JSON.parse(responseText);
         console.log('Parsed response data:', data);
       } catch (parseError) {
         console.error('JSON parsing failed:', parseError);
-        const responseText = await response.text();
-        console.error('Response that failed to parse:', responseText);
+        console.error('Response text that failed to parse:', responseText);
         
         setConnectionStatus({ 
           isConnected: false, 
           lastTested: new Date(), 
-          error: `Invalid response format. Expected JSON but got: ${responseText.substring(0, 100)}` 
+          error: `Invalid JSON response: ${responseText.substring(0, 100)}` 
         });
         return false;
       }

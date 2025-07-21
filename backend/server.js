@@ -46,7 +46,7 @@ app.post('/api/test-connection', async (req, res) => {
   console.log('Headers:', req.headers);
   console.log('Body:', JSON.stringify(req.body, null, 2));
   
-  // Ensure JSON response header is set
+  // Ensure JSON response header is set from the start
   res.setHeader('Content-Type', 'application/json');
   
   try {
@@ -55,10 +55,12 @@ app.post('/api/test-connection', async (req, res) => {
     
     if (!config || !config.host || !config.database || !config.username || !config.password) {
       console.log('Missing required fields in config');
-      return res.status(400).json({ 
+      const errorResponse = { 
         success: false, 
         error: 'Missing required database configuration fields' 
-      });
+      };
+      console.log('Sending error response:', errorResponse);
+      return res.status(400).json(errorResponse);
     }
     
     console.log('Creating test pool...');
@@ -72,9 +74,9 @@ app.post('/api/test-connection', async (req, res) => {
     await testPool.end();
     
     console.log('Database connection test successful');
-    const response = { success: true, message: 'Connection successful' };
-    console.log('Sending response:', response);
-    res.json(response);
+    const successResponse = { success: true, message: 'Connection successful' };
+    console.log('Sending success response:', successResponse);
+    res.json(successResponse);
   } catch (error) {
     console.error('Connection test failed:', error);
     const errorResponse = { 

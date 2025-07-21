@@ -78,7 +78,7 @@ const buildFilteredQuery = (filters: FilterState): { query: string; params: any[
   return { query, params };
 };
 
-// Utility function to validate and parse JSON responses
+// Utility function to safely read and parse JSON responses
 const parseJsonResponse = async (response: Response) => {
   console.log('Parsing response:', {
     status: response.status,
@@ -86,9 +86,7 @@ const parseJsonResponse = async (response: Response) => {
     contentType: response.headers.get('content-type')
   });
 
-  const contentType = response.headers.get('content-type');
-  
-  // Get the raw response text first
+  // Read the response body once and store it
   const responseText = await response.text();
   console.log('Raw response text:', responseText);
   
@@ -96,7 +94,7 @@ const parseJsonResponse = async (response: Response) => {
     throw new Error('Empty response received from server');
   }
   
-  // Try to parse as JSON regardless of content-type (some servers may not set it correctly)
+  // Try to parse as JSON
   try {
     const data = JSON.parse(responseText);
     console.log('Successfully parsed JSON:', data);
@@ -105,6 +103,7 @@ const parseJsonResponse = async (response: Response) => {
     console.error('JSON parsing failed:', parseError);
     console.error('Response text that failed to parse:', responseText);
     
+    const contentType = response.headers.get('content-type');
     if (!contentType || !contentType.includes('application/json')) {
       throw new Error(`Server returned non-JSON response (${response.status}): ${responseText.substring(0, 200)}`);
     } else {
@@ -145,12 +144,18 @@ export const fetchPrintJobsFromDatabase = async (
     if (!response.ok) {
       console.error('Print jobs API failed with status:', response.status);
       
+      // Read response body once for error handling
+      const responseText = await response.text();
       let errorMessage = `Database query failed: ${response.status} ${response.statusText}`;
-      try {
-        const errorData = await parseJsonResponse(response);
-        errorMessage = errorData.error || errorMessage;
-      } catch (parseError) {
-        console.error('Failed to parse error response:', parseError);
+      
+      if (responseText.trim()) {
+        try {
+          const errorData = JSON.parse(responseText);
+          errorMessage = errorData.error || errorMessage;
+        } catch (parseError) {
+          console.error('Failed to parse error response:', parseError);
+          errorMessage = `Server error: ${responseText.substring(0, 100)}`;
+        }
       }
       
       throw new Error(errorMessage);
@@ -190,8 +195,8 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
     console.log('Filament types API response status:', response.status);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Filament types API failed:', errorText);
+      const responseText = await response.text();
+      console.error('Filament types API failed:', responseText);
       throw new Error(`Failed to fetch filament types: ${response.status} ${response.statusText}`);
     }
 
@@ -225,8 +230,8 @@ export const fetchPrintersFromDatabase = async (config: DatabaseConfig): Promise
     console.log('Printers API response status:', response.status);
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Printers API failed:', errorText);
+      const responseText = await response.text();
+      console.error('Printers API failed:', responseText);
       throw new Error(`Failed to fetch printers: ${response.status} ${response.statusText}`);
     }
 
