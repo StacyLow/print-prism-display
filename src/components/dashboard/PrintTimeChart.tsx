@@ -1,3 +1,4 @@
+
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, AreaChart, Area } from "recharts";
@@ -57,7 +58,7 @@ export function PrintTimeChart({ data, isLoading }: PrintTimeChartProps) {
             <YAxis 
               stroke="hsl(var(--muted-foreground))"
               fontSize={12}
-              tickFormatter={(value) => `${Math.round(value)}h`}
+              tickFormatter={(value) => `${Math.round(value / 60 * 10) / 10}h`}
             />
             <ChartTooltip 
               content={<ChartTooltipContent />}

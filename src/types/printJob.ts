@@ -1,13 +1,14 @@
 
 export interface PrintJob {
+  id: number; // Added id field from database
   filename: string;
   status: 'completed' | 'cancelled' | 'in_progress' | 'interrupted' | 'server_exit' | 'klippy_shutdown';
-  total_duration: number; // in minutes
-  filament_total: number; // in meters
+  total_duration: number; // in minutes (converted from seconds in database)
+  filament_total: number; // in meters (converted from mm in database)
   filament_type: string;
   filament_weight: number; // in grams
-  print_start: Date;
-  print_end: Date;
+  print_start: Date; // converted from unix timestamp
+  print_end: Date; // converted from unix timestamp
   printer_name: string;
 }
 

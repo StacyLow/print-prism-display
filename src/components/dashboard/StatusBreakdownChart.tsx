@@ -10,13 +10,14 @@ interface StatusBreakdownChartProps {
   isLoading?: boolean;
 }
 
+// Distinct colors for each status
 const statusColors = {
-  completed: "hsl(var(--primary))",
-  cancelled: "hsl(var(--destructive))",
-  interrupted: "hsl(var(--orange))",
-  server_exit: "hsl(var(--red))",
-  klippy_shutdown: "hsl(var(--yellow))",
-  in_progress: "hsl(var(--secondary))",
+  completed: "#22c55e", // Green
+  cancelled: "#ef4444", // Red
+  interrupted: "#f97316", // Orange
+  server_exit: "#8b5cf6", // Purple
+  klippy_shutdown: "#eab308", // Yellow
+  in_progress: "#3b82f6", // Blue
 };
 
 const statusLabels = {

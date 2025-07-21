@@ -1,11 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 import { useDatabaseContext } from '@/contexts/DatabaseContext';
+import { fetchPrintJobsFromDatabase, fetchFilamentTypesFromDatabase, fetchPrintersFromDatabase } from '@/services/database';
 
 // Mock data for development - replace with actual API calls
 const generateMockData = (count: number): PrintJob[] => {
-  const filamentTypes = ['PLA', 'ABS', 'PETG', 'TPU', 'WOOD'];
-  const printers = ['Printer A', 'Printer B', 'Printer C', 'Printer D'];
+  // Updated to match actual database printer names and filament types
+  const filamentTypes = ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+  const printers = ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
   const statuses: PrintJob['status'][] = ['completed', 'cancelled', 'in_progress', 'interrupted', 'server_exit', 'klippy_shutdown'];
   
   // Status distribution weights (70% completed, 15% cancelled, 5% interrupted, 5% in_progress, 3% server_exit, 2% klippy_shutdown)
@@ -30,6 +32,7 @@ const generateMockData = (count: number): PrintJob[] => {
     }
     
     return {
+      id: i + 1, // Added id field
       filename: `model_${i + 1}.gcode`,
       status: selectedStatus,
       total_duration: duration,
@@ -41,21 +44,6 @@ const generateMockData = (count: number): PrintJob[] => {
       printer_name: printers[Math.floor(Math.random() * printers.length)],
     };
   });
-};
-
-// Function to fetch data from database
-const fetchDatabaseData = async (filters: FilterState): Promise<PrintJob[]> => {
-  // This would be replaced with actual database query
-  // For now, we'll simulate a database call that returns all available data
-  console.log('Fetching data from database with filters:', filters);
-  
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // TODO: Replace with actual database query
-  // Example: const response = await fetch('/api/print-jobs', { ... });
-  // For now, return empty array since we don't have actual DB connection
-  return [];
 };
 
 const getDateRangeStart = (range: FilterState['dateRange']): Date => {
@@ -110,7 +98,7 @@ const calculateMetrics = (data: PrintJob[]): MetricData => {
 };
 
 export const usePrintJobs = (filters: FilterState) => {
-  const { connectionStatus, isUsingMockData } = useDatabaseContext();
+  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
   
   return useQuery({
     queryKey: ['printJobs', filters, connectionStatus.isConnected, isUsingMockData],
@@ -121,11 +109,14 @@ export const usePrintJobs = (filters: FilterState) => {
       // Use database data if connected and not using mock data
       if (connectionStatus.isConnected && !isUsingMockData) {
         try {
-          const databaseData = await fetchDatabaseData(filters);
-          return filterData(databaseData, filters);
+          console.log('Fetching data from database with config:', config);
+          const databaseData = await fetchPrintJobsFromDatabase(config, filters);
+          console.log(`Fetched ${databaseData.length} jobs from database`);
+          return databaseData; // No need to filter again as it's done in the query
         } catch (error) {
           console.error('Failed to fetch database data:', error);
           // Fall back to mock data if database fetch fails
+          console.log('Falling back to mock data due to database error');
           const mockData = generateMockData(150);
           return filterData(mockData, filters);
         }
@@ -189,21 +180,45 @@ export const useChartData = (filters: FilterState) => {
 };
 
 export const useFilamentTypes = () => {
+  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
+  
   return useQuery({
-    queryKey: ['filamentTypes'],
+    queryKey: ['filamentTypes', connectionStatus.isConnected, isUsingMockData],
     queryFn: async () => {
-      // In real app, fetch from API
-      return ['PLA', 'ABS', 'PETG', 'TPU', 'WOOD', 'ASA', 'PC'];
+      if (connectionStatus.isConnected && !isUsingMockData) {
+        try {
+          return await fetchFilamentTypesFromDatabase(config);
+        } catch (error) {
+          console.error('Failed to fetch filament types from database:', error);
+          // Fall back to default types
+          return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+        }
+      } else {
+        // Return mock data
+        return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+      }
     },
   });
 };
 
 export const usePrinters = () => {
+  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
+  
   return useQuery({
-    queryKey: ['printers'],
+    queryKey: ['printers', connectionStatus.isConnected, isUsingMockData],
     queryFn: async () => {
-      // In real app, fetch from API
-      return ['Printer A', 'Printer B', 'Printer C', 'Printer D'];
+      if (connectionStatus.isConnected && !isUsingMockData) {
+        try {
+          return await fetchPrintersFromDatabase(config);
+        } catch (error) {
+          console.error('Failed to fetch printers from database:', error);
+          // Fall back to default printers
+          return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+        }
+      } else {
+        // Return mock data
+        return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+      }
     },
   });
 };
