@@ -8,7 +8,7 @@ import { componentTagger } from "lovable-tagger";
 export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0", // Bind to all network interfaces
-    port: 3000, // Changed from 8080 to 3000 to match your setup
+    port: 5173, // Using Vite default port (8080 unavailable)
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
@@ -27,7 +27,7 @@ export default defineConfig(({ mode }) => ({
   },
   preview: {
     host: "0.0.0.0",
-    port: 3000,
+    port: 5173,
   },
   plugins: [
     react(),
