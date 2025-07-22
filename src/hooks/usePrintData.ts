@@ -1,3 +1,4 @@
+
 import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,7 +32,7 @@ const generateMockData = (count: number): PrintJob[] => {
     }
     
     return {
-      id: i + 1, // Added id field
+      id: i + 1,
       filename: `model_${i + 1}.gcode`,
       status: selectedStatus,
       total_duration: duration,
@@ -46,28 +47,70 @@ const generateMockData = (count: number): PrintJob[] => {
 };
 
 const calculateMetrics = (data: PrintJob[]): MetricData => {
-  const completedJobs = data.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress');
-  const nonActiveJobs = data.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress');
+  // Filter out jobs with invalid durations (0 or negative)
+  const validJobs = data.filter(job => job.total_duration > 0);
+  const completedJobs = validJobs.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress');
+  const nonActiveJobs = validJobs.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress');
   
   // Status breakdown
   const statusBreakdown = {
-    completed: data.filter(job => job.status === 'completed').length,
-    cancelled: data.filter(job => job.status === 'cancelled').length,
-    interrupted: data.filter(job => job.status === 'interrupted').length,
-    server_exit: data.filter(job => job.status === 'server_exit').length,
-    klippy_shutdown: data.filter(job => job.status === 'klippy_shutdown').length,
-    in_progress: data.filter(job => job.status === 'in_progress').length,
+    completed: validJobs.filter(job => job.status === 'completed').length,
+    cancelled: validJobs.filter(job => job.status === 'cancelled').length,
+    interrupted: validJobs.filter(job => job.status === 'interrupted').length,
+    server_exit: validJobs.filter(job => job.status === 'server_exit').length,
+    klippy_shutdown: validJobs.filter(job => job.status === 'klippy_shutdown').length,
+    in_progress: validJobs.filter(job => job.status === 'in_progress').length,
   };
   
   return {
-    totalPrintTime: data.reduce((sum, job) => sum + job.total_duration, 0),
+    totalPrintTime: validJobs.reduce((sum, job) => sum + job.total_duration, 0),
     totalFilamentLength: completedJobs.reduce((sum, job) => sum + job.filament_total, 0),
     totalFilamentWeight: completedJobs.reduce((sum, job) => sum + job.filament_weight, 0),
     successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
-    totalJobs: data.length,
-    avgPrintTime: data.length > 0 ? data.reduce((sum, job) => sum + job.total_duration, 0) / data.length : 0,
+    totalJobs: validJobs.length,
+    avgPrintTime: validJobs.length > 0 ? validJobs.reduce((sum, job) => sum + job.total_duration, 0) / validJobs.length : 0,
     statusBreakdown,
   };
+};
+
+// Helper function to get date range start based on actual data
+const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date> => {
+  if (range === 'ALL') {
+    return new Date('2020-01-01');
+  }
+  
+  try {
+    // Get the latest date from the database to calculate relative ranges
+    const { data: latestJob } = await supabase
+      .from('print_jobs')
+      .select('print_start')
+      .order('print_start', { ascending: false })
+      .limit(1)
+      .single();
+
+    const latestDate = latestJob ? new Date(latestJob.print_start * 1000) : new Date();
+    
+    switch (range) {
+      case '1W': return new Date(latestDate.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '1M': return new Date(latestDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case '3M': return new Date(latestDate.getTime() - 90 * 24 * 60 * 60 * 1000);
+      case '6M': return new Date(latestDate.getTime() - 180 * 24 * 60 * 60 * 1000);
+      case '1Y': return new Date(latestDate.getTime() - 365 * 24 * 60 * 60 * 1000);
+      default: return new Date(latestDate.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+  } catch (error) {
+    console.error('Error getting latest job date:', error);
+    // Fallback to current date-based ranges
+    const now = new Date();
+    switch (range) {
+      case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+      case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+      default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+  }
 };
 
 // Print Job Data Fetching from Supabase
@@ -87,35 +130,54 @@ export const usePrintJobs = (filters: FilterState) => {
           throw error;
         }
 
-        // Convert Supabase data to PrintJob format
-        const convertedData: PrintJob[] = (data || []).map(row => ({
-          id: row.id,
-          filename: row.filename || '',
-          status: (row.status as PrintJob['status']) || 'completed',
-          total_duration: row.total_duration || 0,
-          filament_total: row.filament_total || 0,
-          filament_type: row.filament_type || 'PLA',
-          print_start: new Date(row.print_start * 1000),
-          print_end: new Date(row.print_end * 1000),
-          filament_weight: row.filament_weight || 0,
-          printer_name: row.printer_name || 'Unknown',
-        }));
+        console.info(`Raw data from Supabase: ${data?.length || 0} rows`);
+
+        // Convert Supabase data to PrintJob format with proper unit conversions
+        const convertedData: PrintJob[] = (data || []).map(row => {
+          // Convert timestamps from Unix seconds to JavaScript Date objects
+          const printStart = new Date(row.print_start * 1000);
+          const printEnd = new Date(row.print_end * 1000);
+          
+          // Convert duration from seconds to minutes
+          const durationMinutes = (row.total_duration || 0) / 60;
+          
+          // Convert filament from mm to meters
+          const filamentMeters = (row.filament_total || 0) / 1000;
+          
+          return {
+            id: row.id,
+            filename: row.filename || '',
+            status: (row.status as PrintJob['status']) || 'completed',
+            total_duration: durationMinutes,
+            filament_total: filamentMeters,
+            filament_type: row.filament_type || 'PLA',
+            print_start: printStart,
+            print_end: printEnd,
+            filament_weight: row.filament_weight || 0,
+            printer_name: row.printer_name || 'Unknown',
+          };
+        }).filter(job => {
+          // Filter out jobs with invalid data
+          return job.total_duration > 0 && 
+                 job.print_start.getFullYear() > 2020 && 
+                 job.print_start.getFullYear() < 2030;
+        });
+
+        console.info(`Converted data: ${convertedData.length} valid jobs`);
+        
+        // Log some sample data for debugging
+        if (convertedData.length > 0) {
+          const sample = convertedData[0];
+          console.info('Sample job:', {
+            date: sample.print_start.toISOString(),
+            duration: `${sample.total_duration.toFixed(1)}min`,
+            filament: `${sample.filament_total.toFixed(1)}m`
+          });
+        }
 
         // Apply filters
-        const getDateRangeStart = (range: FilterState['dateRange']): Date => {
-          const now = new Date();
-          switch (range) {
-            case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-            case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-            case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-            case 'ALL': return new Date(2020, 0, 1);
-            default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          }
-        };
-
-        const startDate = getDateRangeStart(filters.dateRange);
+        const startDate = await getDateRangeStart(filters.dateRange);
+        console.info(`Filtering from date: ${startDate.toISOString()}`);
         
         const filteredData = convertedData.filter(job => {
           const jobDate = new Date(job.print_start);
@@ -126,29 +188,20 @@ export const usePrintJobs = (filters: FilterState) => {
           return dateInRange && filamentMatch && printerMatch;
         });
 
-        console.info(`Fetched ${convertedData.length} print jobs, ${filteredData.length} after filtering`);
+        console.info(`Filtered data: ${filteredData.length} jobs after applying filters`);
+        
+        // Log totals for debugging
+        const totalDuration = filteredData.reduce((sum, job) => sum + job.total_duration, 0);
+        const totalFilament = filteredData.reduce((sum, job) => sum + job.filament_total, 0);
+        console.info(`Totals - Duration: ${(totalDuration / 60).toFixed(1)}h, Filament: ${totalFilament.toFixed(1)}m`);
+        
         return filteredData;
       } catch (error) {
         console.error('Failed to fetch from Supabase, falling back to mock data:', error);
         
-        // Fallback to mock data
-        console.info('Using mock data - generating 150 entries');
+        // Fallback to mock data with proper filtering
         const mockData = generateMockData(150);
-        
-        const getDateRangeStart = (range: FilterState['dateRange']): Date => {
-          const now = new Date();
-          switch (range) {
-            case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-            case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-            case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-            case 'ALL': return new Date(2020, 0, 1);
-            default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          }
-        };
-
-        const startDate = getDateRangeStart(filters.dateRange);
+        const startDate = await getDateRangeStart(filters.dateRange);
         
         return mockData.filter(job => {
           const jobDate = new Date(job.print_start);
@@ -241,7 +294,6 @@ export const useFilamentTypes = () => {
   });
 };
 
-// Printers Hook - fetch from Supabase
 export const usePrinters = () => {
   return useQuery({
     queryKey: ['printers'],
