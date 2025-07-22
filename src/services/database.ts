@@ -127,7 +127,7 @@ export const fetchFilamentTypesFromDatabase = async (config: DatabaseConfig): Pr
     const rawData = await response.json();
     
     // Extract unique filament types and normalize PET to PETG
-    const types = rawData.map((row: any) => row.filament_type === 'PET' ? 'PETG' : row.filament_type);
+    const types = rawData.map((row: any) => row.filament_type === 'PET' ? 'PETG' : row.filament_type) as string[];
     const uniqueTypes = [...new Set(types)].sort();
     
     console.log('Available filament types:', uniqueTypes);
@@ -162,7 +162,7 @@ export const fetchPrintersFromDatabase = async (config: DatabaseConfig): Promise
     const rawData = await response.json();
     
     // Extract unique printer names
-    const printers = [...new Set(rawData.map((row: any) => row.printer_name))].sort();
+    const printers = [...new Set(rawData.map((row: any) => row.printer_name) as string[])].sort();
     
     console.log('Available printers:', printers);
     return printers;
