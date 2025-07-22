@@ -2,22 +2,6 @@
 version: '3.8'
 
 services:
-  # Flask API backend
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: printer-dashboard-backend
-    ports:
-      - "3001:4536"  # internal 4536, external 3001 to match frontend's config
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4536/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-
   # Frontend App
   app:
     build:
@@ -28,9 +12,6 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
-      - VITE_API_URL=http://backend:3001
-    depends_on:
-      - backend
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -51,7 +32,6 @@ services:
       - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - app
-      - backend
     restart: unless-stopped
     profiles:
       - nginx
