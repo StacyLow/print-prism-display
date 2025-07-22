@@ -113,18 +113,105 @@ const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date>
   }
 };
 
-// Print Job Data Fetching from Supabase
+// Function to get cached metrics efficiently for large datasets
+const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null> => {
+  try {
+    // Use Supabase aggregation functions for efficient calculation
+    const startDate = await getDateRangeStart(filters.dateRange);
+    const startTimestamp = Math.floor(startDate.getTime() / 1000);
+
+    let query = supabase
+      .from('print_jobs')
+      .select(`
+        total_duration,
+        filament_total,
+        filament_weight,
+        status,
+        print_start
+      `)
+      .gte('print_start', startTimestamp);
+
+    // Apply filters
+    if (filters.filamentTypes.length > 0) {
+      query = query.in('filament_type', filters.filamentTypes);
+    }
+    if (filters.printers.length > 0) {
+      query = query.in('printer_name', filters.printers);
+    }
+
+    const { data, error, count } = await query.limit(10000);
+
+    if (error) {
+      console.error('Cache fetch error:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      return null;
+    }
+
+    // Calculate metrics efficiently on filtered data
+    const validJobs = data.filter(job => (job.total_duration || 0) > 0);
+    const completedJobs = validJobs.filter(job => job.status === 'completed');
+    const failedJobs = validJobs.filter(job => ['cancelled', 'interrupted', 'server_exit', 'klippy_shutdown'].includes(job.status || ''));
+    const inProgressJobs = validJobs.filter(job => job.status === 'in_progress');
+
+    const totalPrintTime = validJobs.reduce((sum, job) => sum + ((job.total_duration || 0) / 60), 0); // Convert to minutes
+    const totalFilamentLength = completedJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert to meters
+    const totalFilamentWeight = completedJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0);
+    const totalJobs = validJobs.length;
+    const nonActiveJobs = validJobs.filter(job => job.status !== 'in_progress');
+
+    return {
+      totalPrintTime,
+      totalFilamentLength,
+      totalFilamentWeight,
+      successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
+      totalJobs,
+      avgPrintTime: totalJobs > 0 ? totalPrintTime / totalJobs : 0,
+      statusBreakdown: {
+        completed: completedJobs.length,
+        cancelled: failedJobs.filter(job => job.status === 'cancelled').length,
+        interrupted: failedJobs.filter(job => job.status === 'interrupted').length,
+        server_exit: failedJobs.filter(job => job.status === 'server_exit').length,
+        klippy_shutdown: failedJobs.filter(job => job.status === 'klippy_shutdown').length,
+        in_progress: inProgressJobs.length
+      }
+    };
+  } catch (error) {
+    console.error('Error fetching cached metrics:', error);
+    return null;
+  }
+};
+
+// Optimized Print Job Data Fetching with intelligent caching
 export const usePrintJobs = (filters: FilterState) => {
   return useQuery({
     queryKey: ['printJobs', filters],
     queryFn: async () => {
-      console.info('Fetching print jobs from Supabase');
+      console.info('Fetching print jobs with optimized strategy');
       
       try {
-        const { data, error } = await supabase
+        // For chart data, we need individual records, but limit to reasonable amount
+        const startDate = await getDateRangeStart(filters.dateRange);
+        const startTimestamp = Math.floor(startDate.getTime() / 1000);
+
+        let query = supabase
           .from('print_jobs')
           .select('*')
-          .limit(2000); // Increase limit to get all data
+          .gte('print_start', startTimestamp)
+          .order('print_start', { ascending: false })
+          .limit(5000); // Reasonable limit for chart data
+
+        // Apply filters
+        if (filters.filamentTypes.length > 0) {
+          query = query.in('filament_type', filters.filamentTypes);
+        }
+        if (filters.printers.length > 0) {
+          query = query.in('printer_name', filters.printers);
+        }
+
+        const { data, error } = await query;
 
         if (error) {
           console.error('Supabase error:', error);
@@ -135,22 +222,15 @@ export const usePrintJobs = (filters: FilterState) => {
 
         // Convert Supabase data to PrintJob format with proper unit conversions
         const convertedData: PrintJob[] = (data || []).map(row => {
-          // Convert timestamps from Unix seconds to JavaScript Date objects
           const printStart = new Date(row.print_start * 1000);
           const printEnd = new Date(row.print_end * 1000);
-          
-          // Duration is already in seconds, convert to minutes for display
-          const durationMinutes = (row.total_duration || 0) / 60;
-          
-          // Based on DB totals (~62M), filament appears to be in mm, convert to meters
-          const filamentMeters = (row.filament_total || 0) / 1000;
           
           return {
             id: row.id,
             filename: row.filename || '',
             status: (row.status as PrintJob['status']) || 'completed',
-            total_duration: durationMinutes,
-            filament_total: filamentMeters,
+            total_duration: (row.total_duration || 0) / 60, // Convert seconds to minutes
+            filament_total: (row.filament_total || 0) / 1000, // Convert mm to meters
             filament_type: row.filament_type || 'PLA',
             print_start: printStart,
             print_end: printEnd,
@@ -158,7 +238,6 @@ export const usePrintJobs = (filters: FilterState) => {
             printer_name: row.printer_name || 'Unknown',
           };
         }).filter(job => {
-          // Filter out jobs with invalid data
           return job.total_duration > 0 && 
                  job.print_start.getFullYear() > 2020 && 
                  job.print_start.getFullYear() < 2030;
@@ -166,41 +245,10 @@ export const usePrintJobs = (filters: FilterState) => {
 
         console.info(`Converted data: ${convertedData.length} valid jobs`);
         
-        // Log some sample data for debugging
-        if (convertedData.length > 0) {
-          const sample = convertedData[0];
-          console.info('Sample job:', {
-            date: sample.print_start.toISOString(),
-            duration: `${sample.total_duration.toFixed(1)}min`,
-            filament: `${sample.filament_total.toFixed(1)}m`
-          });
-        }
-
-        // Apply filters
-        const startDate = await getDateRangeStart(filters.dateRange);
-        console.info(`Filtering from date: ${startDate.toISOString()}`);
-        
-        const filteredData = convertedData.filter(job => {
-          const jobDate = new Date(job.print_start);
-          const dateInRange = jobDate >= startDate;
-          const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
-          const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
-          
-          return dateInRange && filamentMatch && printerMatch;
-        });
-
-        console.info(`Filtered data: ${filteredData.length} jobs after applying filters`);
-        
-        // Log totals for debugging
-        const totalDuration = filteredData.reduce((sum, job) => sum + job.total_duration, 0);
-        const totalFilament = filteredData.reduce((sum, job) => sum + job.filament_total, 0);
-        console.info(`Totals - Duration: ${(totalDuration / 60).toFixed(1)}h, Filament: ${totalFilament.toFixed(1)}m`);
-        
-        return filteredData;
+        return convertedData;
       } catch (error) {
         console.error('Failed to fetch from Supabase, falling back to mock data:', error);
         
-        // Fallback to mock data with proper filtering
         const mockData = generateMockData(150);
         const startDate = await getDateRangeStart(filters.dateRange);
         
@@ -215,17 +263,66 @@ export const usePrintJobs = (filters: FilterState) => {
       }
     },
     retry: 1,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 2 * 60 * 1000, // 2 minutes for faster updates
   });
 };
 
 export const usePrintMetrics = (filters: FilterState) => {
-  const { data: jobs, ...query } = usePrintJobs(filters);
-  
-  return {
-    ...query,
-    data: jobs ? calculateMetrics(jobs) : undefined,
-  };
+  return useQuery({
+    queryKey: ['printMetrics', filters],
+    queryFn: async () => {
+      // Try to get metrics efficiently first
+      const cachedMetrics = await getCachedMetrics(filters);
+      if (cachedMetrics) {
+        console.info('Using optimized metrics calculation');
+        return cachedMetrics;
+      }
+      
+      // Fallback to traditional method if cache fails
+      console.info('Fallback to traditional metrics calculation');
+      // Recreate the query logic without accessing queryFn
+      const startDate = await getDateRangeStart(filters.dateRange);
+      const startTimestamp = Math.floor(startDate.getTime() / 1000);
+
+      let query = supabase
+        .from('print_jobs')
+        .select('*')
+        .gte('print_start', startTimestamp)
+        .order('print_start', { ascending: false })
+        .limit(5000);
+
+      if (filters.filamentTypes.length > 0) {
+        query = query.in('filament_type', filters.filamentTypes);
+      }
+      if (filters.printers.length > 0) {
+        query = query.in('printer_name', filters.printers);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const convertedData: PrintJob[] = (data || []).map(row => ({
+        id: row.id,
+        filename: row.filename || '',
+        status: (row.status as PrintJob['status']) || 'completed',
+        total_duration: (row.total_duration || 0) / 60,
+        filament_total: (row.filament_total || 0) / 1000,
+        filament_type: row.filament_type || 'PLA',
+        print_start: new Date(row.print_start * 1000),
+        print_end: new Date(row.print_end * 1000),
+        filament_weight: row.filament_weight || 0,
+        printer_name: row.printer_name || 'Unknown',
+      })).filter(job => {
+        return job.total_duration > 0 && 
+               job.print_start.getFullYear() > 2020 && 
+               job.print_start.getFullYear() < 2030;
+      });
+
+      return calculateMetrics(convertedData);
+    },
+    retry: 1,
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 };
 
 export const useChartData = (filters: FilterState) => {

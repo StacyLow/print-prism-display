@@ -14,6 +14,57 @@ export type Database = {
   }
   public: {
     Tables: {
+      metrics_cache: {
+        Row: {
+          cache_key: string
+          completed_jobs: number | null
+          created_at: string | null
+          date_end: string | null
+          date_start: string | null
+          failed_jobs: number | null
+          filament_type: string | null
+          id: string
+          job_count: number | null
+          printer_name: string | null
+          total_filament_length: number | null
+          total_filament_weight: number | null
+          total_print_time: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          cache_key: string
+          completed_jobs?: number | null
+          created_at?: string | null
+          date_end?: string | null
+          date_start?: string | null
+          failed_jobs?: number | null
+          filament_type?: string | null
+          id?: string
+          job_count?: number | null
+          printer_name?: string | null
+          total_filament_length?: number | null
+          total_filament_weight?: number | null
+          total_print_time?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          cache_key?: string
+          completed_jobs?: number | null
+          created_at?: string | null
+          date_end?: string | null
+          date_start?: string | null
+          failed_jobs?: number | null
+          filament_type?: string | null
+          id?: string
+          job_count?: number | null
+          printer_name?: string | null
+          total_filament_length?: number | null
+          total_filament_weight?: number | null
+          total_print_time?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       print_jobs: {
         Row: {
           filament_total: number | null
