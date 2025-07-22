@@ -26,7 +26,6 @@ export type Database = {
           printer_name: string | null
           status: string | null
           total_duration: number | null
-          user_id: string | null
         }
         Insert: {
           filament_total?: number | null
@@ -39,7 +38,6 @@ export type Database = {
           printer_name?: string | null
           status?: string | null
           total_duration?: number | null
-          user_id?: string | null
         }
         Update: {
           filament_total?: number | null
@@ -52,7 +50,6 @@ export type Database = {
           printer_name?: string | null
           status?: string | null
           total_duration?: number | null
-          user_id?: string | null
         }
         Relationships: []
       }
