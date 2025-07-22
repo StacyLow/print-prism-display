@@ -117,9 +117,6 @@ const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date>
 const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null> => {
   try {
     // Use Supabase aggregation functions for efficient calculation
-    const startDate = await getDateRangeStart(filters.dateRange);
-    const startTimestamp = Math.floor(startDate.getTime() / 1000);
-
     let query = supabase
       .from('print_jobs')
       .select(`
@@ -128,8 +125,14 @@ const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null
         filament_weight,
         status,
         print_start
-      `)
-      .gte('print_start', startTimestamp);
+      `);
+
+    // Only apply date filtering if not "ALL"
+    if (filters.dateRange !== 'ALL') {
+      const startDate = await getDateRangeStart(filters.dateRange);
+      const startTimestamp = Math.floor(startDate.getTime() / 1000);
+      query = query.gte('print_start', startTimestamp);
+    }
 
     // Apply filters
     if (filters.filamentTypes.length > 0) {
@@ -157,8 +160,8 @@ const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null
     const inProgressJobs = validJobs.filter(job => job.status === 'in_progress');
 
     const totalPrintTime = validJobs.reduce((sum, job) => sum + ((job.total_duration || 0) / 60), 0); // Convert to minutes
-    const totalFilamentLength = completedJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert to meters
-    const totalFilamentWeight = completedJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0);
+    const totalFilamentLength = validJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert to meters - using ALL jobs
+    const totalFilamentWeight = validJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0); // Using ALL jobs
     const totalJobs = validJobs.length;
     const nonActiveJobs = validJobs.filter(job => job.status !== 'in_progress');
 
