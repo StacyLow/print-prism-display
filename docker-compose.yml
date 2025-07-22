@@ -2,24 +2,21 @@
 version: '3.8'
 
 services:
-  # Backend API
+  # Flask API backend
   backend:
     build:
-      context: ./backend
+      context: .
       dockerfile: Dockerfile
     container_name: printer-dashboard-backend
     ports:
-      - "3001:3001"
-    environment:
-      - NODE_ENV=production
-      - PORT=3001
+      - "3001:4536"  # internal 4536, external 3001 to match frontend's config
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:4536/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 20s
+      start_period: 10s
 
   # Frontend App
   app:
