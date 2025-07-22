@@ -1,4 +1,3 @@
-
 import { DatabaseConfig } from '@/types/database';
 import { PrintJob, FilterState } from '@/types/printJob';
 
@@ -48,13 +47,20 @@ const filterPrintJobs = (data: PrintJob[], filters: FilterState): PrintJob[] => 
   });
 };
 
-// Get the API base URL
+// Get the API base URL based on environment
 const getApiBaseUrl = (): string => {
-  // In production, use the backend port directly
-  if (import.meta.env.PROD) {
-    return `${window.location.protocol}//${window.location.hostname}:3001`;
+  // Check if we're running in Docker container (production)
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
   }
-  // In development, use the proxy
+  
+  // In production build, try to detect if we're in Docker
+  if (import.meta.env.PROD) {
+    // First try the Docker service name
+    return 'http://backend:4536';
+  }
+  
+  // In development, use the proxy (empty string means relative to current host)
   return '';
 };
 

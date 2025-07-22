@@ -17,6 +17,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - printer-network
 
   # Frontend App
   app:
@@ -28,8 +30,10 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=production
+      - VITE_API_URL=http://backend:4536
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
@@ -37,6 +41,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - printer-network
 
   # Optional: Nginx reverse proxy for production
   nginx:
@@ -54,11 +60,12 @@ services:
     restart: unless-stopped
     profiles:
       - nginx
+    networks:
+      - printer-network
 
 networks:
   printer-network:
     driver: bridge
-    external: false
 
 volumes:
   ssl:
