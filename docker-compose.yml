@@ -15,13 +15,14 @@ services:
       - "5432:5432"  # Expose for external connections if needed
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 30s
     networks:
       - printer-network
 
@@ -41,6 +42,8 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    profiles:
+      - admin
     networks:
       - printer-network
 
@@ -67,7 +70,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 60s
     networks:
       - printer-network
 
@@ -91,26 +94,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
-    networks:
-      - printer-network
-
-  # Optional: Nginx reverse proxy for production
-  nginx:
-    image: nginx:alpine
-    container_name: printer-dashboard-nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
-    depends_on:
-      - app
-      - backend
-    restart: unless-stopped
-    profiles:
-      - nginx
+      start_period: 60s
     networks:
       - printer-network
 
@@ -122,6 +106,4 @@ volumes:
   postgres_data:
     driver: local
   pgadmin_data:
-    driver: local
-  ssl:
     driver: local

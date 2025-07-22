@@ -1,3 +1,4 @@
+
 FROM python:3.11-slim
 
 WORKDIR /app
@@ -13,18 +14,22 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY app.py .
+COPY init.sql .
 
-# Create non-root user for security
-RUN addgroup --gid 1001 --system python && \
-    adduser --no-create-home --shell /bin/false --disabled-password --uid 1001 --system --group python
+# Create non-root user for security but keep write permissions
+RUN addgroup --gid 1001 --system appgroup && \
+    adduser --no-create-home --shell /bin/false --disabled-password --uid 1001 --system --group appgroup appuser
 
-USER python
+# Change ownership of the app directory to the app user
+RUN chown -R appuser:appgroup /app
+
+USER appuser
 
 # Expose port
 EXPOSE 4536
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -f http://localhost:4536/health || exit 1
 
 # Start the application
