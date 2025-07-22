@@ -3,7 +3,7 @@ import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFai
 import { useDatabaseContext } from '@/contexts/DatabaseContext';
 import { fetchPrintJobsFromDatabase, fetchFilamentTypesFromDatabase, fetchPrintersFromDatabase } from '@/services/database';
 
-// Mock data for development - replace with actual API calls
+// Mock data for development - keep for fallback
 const generateMockData = (count: number): PrintJob[] => {
   // Updated to match actual database printer names and filament types
   const filamentTypes = ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
@@ -46,32 +46,6 @@ const generateMockData = (count: number): PrintJob[] => {
   });
 };
 
-const getDateRangeStart = (range: FilterState['dateRange']): Date => {
-  const now = new Date();
-  switch (range) {
-    case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-    case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-    case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-    case 'ALL': return new Date(2020, 0, 1);
-    default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  }
-};
-
-const filterData = (data: PrintJob[], filters: FilterState): PrintJob[] => {
-  const startDate = getDateRangeStart(filters.dateRange);
-  
-  return data.filter(job => {
-    const jobDate = new Date(job.print_start);
-    const dateInRange = jobDate >= startDate;
-    const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
-    const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
-    
-    return dateInRange && filamentMatch && printerMatch;
-  });
-};
-
 const calculateMetrics = (data: PrintJob[]): MetricData => {
   const completedJobs = data.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress');
   const nonActiveJobs = data.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress');
@@ -106,25 +80,73 @@ export const usePrintJobs = (filters: FilterState) => {
       console.log('Database connected:', connectionStatus.isConnected);
       console.log('Using mock data:', isUsingMockData);
       
-      // Use database data if connected and not using mock data
+      // Use Python API if connected and not using mock data
       if (connectionStatus.isConnected && !isUsingMockData) {
         try {
-          console.log('Fetching data from database with config:', config);
-          const databaseData = await fetchPrintJobsFromDatabase(config, filters);
-          console.log(`Fetched ${databaseData.length} jobs from database`);
-          return databaseData; // No need to filter again as it's done in the query
+          console.log('Fetching data from Python API');
+          const apiData = await fetchPrintJobsFromDatabase(config, filters);
+          console.log(`Fetched and filtered ${apiData.length} jobs from API`);
+          return apiData;
         } catch (error) {
-          console.error('Failed to fetch database data:', error);
-          // Fall back to mock data if database fetch fails
-          console.log('Falling back to mock data due to database error');
+          console.error('Failed to fetch API data:', error);
+          // Fall back to mock data if API fetch fails
+          console.log('Falling back to mock data due to API error');
           const mockData = generateMockData(150);
-          return filterData(mockData, filters);
+          
+          // Apply the same filtering logic to mock data
+          const getDateRangeStart = (range: FilterState['dateRange']): Date => {
+            const now = new Date();
+            switch (range) {
+              case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+              case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+              case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+              case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+              case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+              case 'ALL': return new Date(2020, 0, 1);
+              default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            }
+          };
+
+          const startDate = getDateRangeStart(filters.dateRange);
+          
+          return mockData.filter(job => {
+            const jobDate = new Date(job.print_start);
+            const dateInRange = jobDate >= startDate;
+            const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
+            const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
+            
+            return dateInRange && filamentMatch && printerMatch;
+          });
         }
       } else {
         // Use mock data
         console.log('Using mock data - generating 150 entries');
         const mockData = generateMockData(150);
-        return filterData(mockData, filters);
+        
+        // Apply filtering to mock data
+        const getDateRangeStart = (range: FilterState['dateRange']): Date => {
+          const now = new Date();
+          switch (range) {
+            case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+            case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+            case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            case 'ALL': return new Date(2020, 0, 1);
+            default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          }
+        };
+
+        const startDate = getDateRangeStart(filters.dateRange);
+        
+        return mockData.filter(job => {
+          const jobDate = new Date(job.print_start);
+          const dateInRange = jobDate >= startDate;
+          const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
+          const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
+          
+          return dateInRange && filamentMatch && printerMatch;
+        });
       }
     },
     staleTime: 5 * 60 * 1000, // 5 minutes
@@ -189,12 +211,10 @@ export const useFilamentTypes = () => {
         try {
           return await fetchFilamentTypesFromDatabase(config);
         } catch (error) {
-          console.error('Failed to fetch filament types from database:', error);
-          // Fall back to default types
+          console.error('Failed to fetch filament types from API:', error);
           return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
         }
       } else {
-        // Return mock data
         return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
       }
     },
@@ -211,12 +231,10 @@ export const usePrinters = () => {
         try {
           return await fetchPrintersFromDatabase(config);
         } catch (error) {
-          console.error('Failed to fetch printers from database:', error);
-          // Fall back to default printers
+          console.error('Failed to fetch printers from API:', error);
           return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
         }
       } else {
-        // Return mock data
         return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
       }
     },
