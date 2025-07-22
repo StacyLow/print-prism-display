@@ -1,3 +1,4 @@
+
 from flask import Flask, request, jsonify
 import psycopg2
 import psycopg2.extras
@@ -5,17 +6,22 @@ import os
 
 app = Flask(__name__)
 
-# Update with your Postgres connection info
+# Use environment variables for database connection
 PG_CONFIG = {
-    'dbname': 'mydb',
-    'user': 'myuser',
-    'password': 'mysecurepassword',
-    'host': 'localhost',
-    'port': 5432
+    'dbname': os.getenv('POSTGRES_DB', 'mydb'),
+    'user': os.getenv('POSTGRES_USER', 'myuser'),
+    'password': os.getenv('POSTGRES_PASSWORD', 'mysecurepassword'),
+    'host': os.getenv('POSTGRES_HOST', 'postgres'),  # Use service name by default
+    'port': int(os.getenv('POSTGRES_PORT', 5432))
 }
 
 def get_connection():
-    return psycopg2.connect(**PG_CONFIG)
+    try:
+        conn = psycopg2.connect(**PG_CONFIG)
+        return conn
+    except psycopg2.Error as e:
+        print(f"Database connection error: {e}")
+        raise
 
 @app.route('/api/print-jobs', methods=['GET'])
 def get_print_jobs():
@@ -27,6 +33,7 @@ def get_print_jobs():
         conn.close()
         return jsonify(rows)
     except Exception as e:
+        print(f"Error fetching print jobs: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/query', methods=['POST'])
@@ -42,6 +49,7 @@ def run_query():
         conn.close()
         return jsonify(rows)
     except Exception as e:
+        print(f"Error executing query: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/health', methods=['GET'])
@@ -54,10 +62,31 @@ def test_connection():
         conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("SELECT 1")
+        result = cursor.fetchone()
         conn.close()
-        return jsonify({"database": "connected"}), 200
+        return jsonify({
+            "database": "connected", 
+            "config": {
+                "host": PG_CONFIG['host'],
+                "port": PG_CONFIG['port'],
+                "database": PG_CONFIG['dbname'],
+                "user": PG_CONFIG['user']
+            }
+        }), 200
     except Exception as e:
-        return jsonify({"database": "error", "detail": str(e)}), 500
+        print(f"Database connection test failed: {e}")
+        return jsonify({
+            "database": "error", 
+            "detail": str(e),
+            "config": {
+                "host": PG_CONFIG['host'],
+                "port": PG_CONFIG['port'],
+                "database": PG_CONFIG['dbname'],
+                "user": PG_CONFIG['user']
+            }
+        }), 500
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=4536)
+    print("Starting Flask app...")
+    print(f"Database config: {PG_CONFIG['user']}@{PG_CONFIG['host']}:{PG_CONFIG['port']}/{PG_CONFIG['dbname']}")
+    app.run(host='0.0.0.0', port=4536, debug=True)

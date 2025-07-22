@@ -2,6 +2,48 @@
 version: '3.8'
 
 services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: printer-dashboard-postgres
+    environment:
+      - POSTGRES_DB=mydb
+      - POSTGRES_USER=myuser
+      - POSTGRES_PASSWORD=mysecurepassword
+      - POSTGRES_HOST_AUTH_METHOD=md5
+    ports:
+      - "5432:5432"  # Expose for external connections if needed
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser -d mydb"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - printer-network
+
+  # pgAdmin for database management
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: printer-dashboard-pgadmin
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@admin.com
+      - PGADMIN_DEFAULT_PASSWORD=admin
+      - PGADMIN_CONFIG_SERVER_MODE=False
+    ports:
+      - "8080:80"  # pgAdmin web interface
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - printer-network
+
   # Python Flask backend
   backend:
     build:
@@ -12,10 +54,13 @@ services:
       - POSTGRES_DB=mydb
       - POSTGRES_USER=myuser
       - POSTGRES_PASSWORD=mysecurepassword
-      - POSTGRES_HOST=postgres
+      - POSTGRES_HOST=postgres  # Use service name instead of localhost
       - POSTGRES_PORT=5432
     ports:
       - "3001:4536"  # internal 4536, external 3001 to match frontend's config
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:4536/health"]
@@ -23,6 +68,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    networks:
+      - printer-network
 
   # Frontend App
   app:
@@ -45,6 +92,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - printer-network
 
   # Optional: Nginx reverse proxy for production
   nginx:
@@ -62,11 +111,17 @@ services:
     restart: unless-stopped
     profiles:
       - nginx
+    networks:
+      - printer-network
 
 networks:
   printer-network:
     driver: bridge
 
 volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
   ssl:
     driver: local
