@@ -3,76 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 import { supabase } from '@/integrations/supabase/client';
 
-// Mock data for development - keep for fallback
-const generateMockData = (count: number): PrintJob[] => {
-  // Updated to match actual database printer names and filament types
-  const filamentTypes = ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
-  const printers = ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
-  const statuses: PrintJob['status'][] = ['completed', 'cancelled', 'in_progress', 'interrupted', 'server_exit', 'klippy_shutdown'];
-  
-  // Status distribution weights (70% completed, 15% cancelled, 5% interrupted, 5% in_progress, 3% server_exit, 2% klippy_shutdown)
-  const statusWeights = [0.7, 0.15, 0.05, 0.05, 0.03, 0.02];
-  
-  return Array.from({ length: count }, (_, i) => {
-    const start = new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000);
-    const duration = Math.random() * 300 + 30; // 30-330 minutes
-    const end = new Date(start.getTime() + duration * 60 * 1000);
-    
-    // Select status based on weights
-    const rand = Math.random();
-    let cumulative = 0;
-    let selectedStatus = statuses[0];
-    
-    for (let j = 0; j < statusWeights.length; j++) {
-      cumulative += statusWeights[j];
-      if (rand <= cumulative) {
-        selectedStatus = statuses[j];
-        break;
-      }
-    }
-    
-    return {
-      id: i + 1,
-      filename: `model_${i + 1}.gcode`,
-      status: selectedStatus,
-      total_duration: duration,
-      filament_total: Math.random() * 100 + 10, // 10-110 meters
-      filament_type: filamentTypes[Math.floor(Math.random() * filamentTypes.length)],
-      filament_weight: Math.random() * 300 + 25, // 25-325 grams
-      print_start: start,
-      print_end: end,
-      printer_name: printers[Math.floor(Math.random() * printers.length)],
-    };
-  });
-};
-
-const calculateMetrics = (data: PrintJob[]): MetricData => {
-  // Filter out jobs with invalid durations (0 or negative)
-  const validJobs = data.filter(job => job.total_duration > 0);
-  const completedJobs = validJobs.filter(job => isSuccessfulStatus(job.status) || job.status === 'in_progress');
-  const nonActiveJobs = validJobs.filter(job => !isActiveStatus(job.status) || job.status === 'in_progress');
-  
-  // Status breakdown
-  const statusBreakdown = {
-    completed: validJobs.filter(job => job.status === 'completed').length,
-    cancelled: validJobs.filter(job => job.status === 'cancelled').length,
-    interrupted: validJobs.filter(job => job.status === 'interrupted').length,
-    server_exit: validJobs.filter(job => job.status === 'server_exit').length,
-    klippy_shutdown: validJobs.filter(job => job.status === 'klippy_shutdown').length,
-    in_progress: validJobs.filter(job => job.status === 'in_progress').length,
-  };
-  
-  return {
-    totalPrintTime: validJobs.reduce((sum, job) => sum + job.total_duration, 0),
-    totalFilamentLength: completedJobs.reduce((sum, job) => sum + job.filament_total, 0),
-    totalFilamentWeight: completedJobs.reduce((sum, job) => sum + job.filament_weight, 0),
-    successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
-    totalJobs: validJobs.length,
-    avgPrintTime: validJobs.length > 0 ? validJobs.reduce((sum, job) => sum + job.total_duration, 0) / validJobs.length : 0,
-    statusBreakdown,
-  };
-};
-
 // Helper function to get date range start based on actual data
 const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date> => {
   if (range === 'ALL') {
@@ -113,10 +43,10 @@ const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date>
   }
 };
 
-// Function to get cached metrics efficiently for large datasets
-const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null> => {
+// Function to get all real data from database
+const getAllRealData = async (filters: FilterState): Promise<MetricData | null> => {
   try {
-    console.log('getCachedMetrics called with filters:', filters);
+    console.log('🔍 getAllRealData called with filters:', filters);
     
     let query = supabase
       .from('print_jobs')
@@ -125,66 +55,77 @@ const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null
         filament_total,
         filament_weight,
         status,
-        print_start
+        print_start,
+        id
       `);
 
-    // Only apply date filtering if not "ALL"
+    // CRITICAL: Only apply date filtering if NOT "ALL"
     if (filters.dateRange !== 'ALL') {
       const startDate = await getDateRangeStart(filters.dateRange);
       const startTimestamp = Math.floor(startDate.getTime() / 1000);
       query = query.gte('print_start', startTimestamp);
-      console.log('Applied date filter. Start timestamp:', startTimestamp);
+      console.log(`📅 Applied date filter for ${filters.dateRange}. Start timestamp:`, startTimestamp);
     } else {
-      console.log('No date filter applied - using ALL data');
+      console.log('🌍 NO DATE FILTER - Using ALL data from database');
     }
 
-    // Apply filters
+    // Apply other filters
     if (filters.filamentTypes.length > 0) {
       query = query.in('filament_type', filters.filamentTypes);
-      console.log('Applied filament type filter:', filters.filamentTypes);
+      console.log('🧵 Applied filament type filter:', filters.filamentTypes);
     }
     if (filters.printers.length > 0) {
       query = query.in('printer_name', filters.printers);
-      console.log('Applied printer filter:', filters.printers);
+      console.log('🖨️ Applied printer filter:', filters.printers);
     }
 
-    const { data, error, count } = await query.limit(10000);
+    // CRITICAL: Remove ALL limits to get every single row
+    console.log('🚀 Fetching ALL rows without limits...');
+    const { data, error } = await query;
 
     if (error) {
-      console.error('Cache fetch error:', error);
-      return null;
+      console.error('❌ Database query error:', error);
+      throw error;
     }
 
     if (!data || data.length === 0) {
-      console.log('No data returned from query');
+      console.log('⚠️ No data returned from database query');
       return null;
     }
 
-    console.log('Raw data fetched:', data.length, 'rows');
+    console.log(`✅ Successfully fetched ${data.length} rows from database`);
 
-    // DON'T filter by total_duration - use ALL jobs
-    const allJobs = data; // Use all fetched data
+    // Use ALL jobs - no filtering by duration or anything else
+    const allJobs = data;
     const completedJobs = allJobs.filter(job => job.status === 'completed');
     const failedJobs = allJobs.filter(job => ['cancelled', 'interrupted', 'server_exit', 'klippy_shutdown'].includes(job.status || ''));
     const inProgressJobs = allJobs.filter(job => job.status === 'in_progress');
-
-    console.log('Job counts - Total:', allJobs.length, 'Completed:', completedJobs.length, 'Failed:', failedJobs.length, 'In Progress:', inProgressJobs.length);
-
-    const totalPrintTime = allJobs.reduce((sum, job) => sum + ((job.total_duration || 0) / 60), 0); // Convert to minutes
-    const totalFilamentLength = allJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert to meters - using ALL jobs
-    const totalFilamentWeight = allJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0); // Using ALL jobs
-    const totalJobs = allJobs.length;
     const nonActiveJobs = allJobs.filter(job => job.status !== 'in_progress');
 
-    console.log('Calculated metrics - Total Jobs:', totalJobs, 'Total Filament Length (km):', totalFilamentLength/1000, 'Total Print Time (hours):', totalPrintTime/60);
+    console.log('📊 Job breakdown:');
+    console.log(`   Total jobs: ${allJobs.length}`);
+    console.log(`   Completed: ${completedJobs.length}`);
+    console.log(`   Failed: ${failedJobs.length}`);
+    console.log(`   In Progress: ${inProgressJobs.length}`);
 
-    return {
+    // Calculate totals using ALL jobs
+    const totalPrintTime = allJobs.reduce((sum, job) => sum + ((job.total_duration || 0) / 60), 0); // Convert seconds to minutes
+    const totalFilamentLength = allJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert mm to meters
+    const totalFilamentWeight = allJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0); // Keep in grams
+
+    console.log('🧮 Calculated totals:');
+    console.log(`   Total Jobs: ${allJobs.length}`);
+    console.log(`   Total Print Time: ${(totalPrintTime / 60).toFixed(1)} hours`);
+    console.log(`   Total Filament Length: ${(totalFilamentLength / 1000).toFixed(1)} km`);
+    console.log(`   Total Filament Weight: ${(totalFilamentWeight / 1000).toFixed(1)} kg`);
+
+    const metrics: MetricData = {
       totalPrintTime,
       totalFilamentLength,
       totalFilamentWeight,
       successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
-      totalJobs,
-      avgPrintTime: totalJobs > 0 ? totalPrintTime / totalJobs : 0,
+      totalJobs: allJobs.length,
+      avgPrintTime: allJobs.length > 0 ? totalPrintTime / allJobs.length : 0,
       statusBreakdown: {
         completed: completedJobs.length,
         cancelled: failedJobs.filter(job => job.status === 'cancelled').length,
@@ -194,32 +135,36 @@ const getCachedMetrics = async (filters: FilterState): Promise<MetricData | null
         in_progress: inProgressJobs.length
       }
     };
+
+    console.log('🎯 Final metrics object:', metrics);
+    return metrics;
   } catch (error) {
-    console.error('Error fetching cached metrics:', error);
+    console.error('💥 Error in getAllRealData:', error);
     return null;
   }
 };
 
-// Optimized Print Job Data Fetching with intelligent caching
+// Simplified Print Job Data Fetching - ALWAYS use real data
 export const usePrintJobs = (filters: FilterState) => {
   return useQuery({
     queryKey: ['printJobs', filters],
     queryFn: async () => {
-      console.info('Fetching print jobs with optimized strategy');
+      console.log('🔄 usePrintJobs: Fetching print jobs data');
       
       try {
-        // For chart data, we need individual records, but limit to reasonable amount
-        const startDate = await getDateRangeStart(filters.dateRange);
-        const startTimestamp = Math.floor(startDate.getTime() / 1000);
-
         let query = supabase
           .from('print_jobs')
           .select('*')
-          .gte('print_start', startTimestamp)
-          .order('print_start', { ascending: false })
-          .limit(5000); // Reasonable limit for chart data
+          .order('print_start', { ascending: false });
 
-        // Apply filters
+        // Apply date filter only if not "ALL"
+        if (filters.dateRange !== 'ALL') {
+          const startDate = await getDateRangeStart(filters.dateRange);
+          const startTimestamp = Math.floor(startDate.getTime() / 1000);
+          query = query.gte('print_start', startTimestamp);
+        }
+
+        // Apply other filters
         if (filters.filamentTypes.length > 0) {
           query = query.in('filament_type', filters.filamentTypes);
         }
@@ -227,16 +172,23 @@ export const usePrintJobs = (filters: FilterState) => {
           query = query.in('printer_name', filters.printers);
         }
 
+        // Remove limit for chart data when using "ALL" time
+        if (filters.dateRange === 'ALL') {
+          // No limit - get all data
+        } else {
+          query = query.limit(5000); // Reasonable limit for non-all time ranges
+        }
+
         const { data, error } = await query;
 
         if (error) {
-          console.error('Supabase error:', error);
+          console.error('❌ usePrintJobs: Supabase error:', error);
           throw error;
         }
 
-        console.info(`Raw data from Supabase: ${data?.length || 0} rows`);
+        console.log(`✅ usePrintJobs: Fetched ${data?.length || 0} jobs for charts`);
 
-        // Convert Supabase data to PrintJob format with proper unit conversions
+        // Convert Supabase data to PrintJob format
         const convertedData: PrintJob[] = (data || []).map(row => {
           const printStart = new Date(row.print_start * 1000);
           const printEnd = new Date(row.print_end * 1000);
@@ -254,32 +206,19 @@ export const usePrintJobs = (filters: FilterState) => {
             printer_name: row.printer_name || 'Unknown',
           };
         }).filter(job => {
-          return job.total_duration > 0 && 
-                 job.print_start.getFullYear() > 2020 && 
+          return job.print_start.getFullYear() > 2020 && 
                  job.print_start.getFullYear() < 2030;
         });
 
-        console.info(`Converted data: ${convertedData.length} valid jobs`);
-        
+        console.log(`📋 usePrintJobs: Returning ${convertedData.length} converted jobs`);
         return convertedData;
       } catch (error) {
-        console.error('Failed to fetch from Supabase, falling back to mock data:', error);
-        
-        const mockData = generateMockData(150);
-        const startDate = await getDateRangeStart(filters.dateRange);
-        
-        return mockData.filter(job => {
-          const jobDate = new Date(job.print_start);
-          const dateInRange = jobDate >= startDate;
-          const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
-          const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
-          
-          return dateInRange && filamentMatch && printerMatch;
-        });
+        console.error('💥 usePrintJobs: Critical error - NO FALLBACK TO MOCK DATA:', error);
+        throw error; // Don't fall back to mock data - throw the error
       }
     },
     retry: 1,
-    staleTime: 2 * 60 * 1000, // 2 minutes for faster updates
+    staleTime: 2 * 60 * 1000,
   });
 };
 
@@ -287,57 +226,20 @@ export const usePrintMetrics = (filters: FilterState) => {
   return useQuery({
     queryKey: ['printMetrics', filters],
     queryFn: async () => {
-      // Try to get metrics efficiently first
-      const cachedMetrics = await getCachedMetrics(filters);
-      if (cachedMetrics) {
-        console.info('Using optimized metrics calculation');
-        return cachedMetrics;
+      console.log('📈 usePrintMetrics: Starting metrics calculation');
+      
+      // ALWAYS use real data - no fallback to mock
+      const realMetrics = await getAllRealData(filters);
+      if (realMetrics) {
+        console.log('✅ usePrintMetrics: Using real database metrics');
+        return realMetrics;
       }
       
-      // Fallback to traditional method if cache fails
-      console.info('Fallback to traditional metrics calculation');
-      // Recreate the query logic without accessing queryFn
-      const startDate = await getDateRangeStart(filters.dateRange);
-      const startTimestamp = Math.floor(startDate.getTime() / 1000);
-
-      let query = supabase
-        .from('print_jobs')
-        .select('*')
-        .gte('print_start', startTimestamp)
-        .order('print_start', { ascending: false })
-        .limit(5000);
-
-      if (filters.filamentTypes.length > 0) {
-        query = query.in('filament_type', filters.filamentTypes);
-      }
-      if (filters.printers.length > 0) {
-        query = query.in('printer_name', filters.printers);
-      }
-
-      const { data, error } = await query;
-      if (error) throw error;
-
-      const convertedData: PrintJob[] = (data || []).map(row => ({
-        id: row.id,
-        filename: row.filename || '',
-        status: (row.status as PrintJob['status']) || 'completed',
-        total_duration: (row.total_duration || 0) / 60,
-        filament_total: (row.filament_total || 0) / 1000,
-        filament_type: row.filament_type || 'PLA',
-        print_start: new Date(row.print_start * 1000),
-        print_end: new Date(row.print_end * 1000),
-        filament_weight: row.filament_weight || 0,
-        printer_name: row.printer_name || 'Unknown',
-      })).filter(job => {
-        return job.total_duration > 0 && 
-               job.print_start.getFullYear() > 2020 && 
-               job.print_start.getFullYear() < 2030;
-      });
-
-      return calculateMetrics(convertedData);
+      console.error('💥 usePrintMetrics: Failed to get real metrics - throwing error');
+      throw new Error('Failed to fetch real metrics from database');
     },
     retry: 1,
-    staleTime: 2 * 60 * 1000, // 2 minutes
+    staleTime: 2 * 60 * 1000,
   });
 };
 
@@ -358,14 +260,13 @@ export const useChartData = (filters: FilterState) => {
     }
     
     acc[date].printTime += job.total_duration;
-    // Include in_progress jobs in filament usage
     acc[date].filamentUsed += (isSuccessfulStatus(job.status) || job.status === 'in_progress') ? job.filament_total : 0;
     acc[date].jobCount += 1;
     
     return acc;
   }, {}) : {};
   
-  // Calculate success rates (treating in_progress as successful)
+  // Calculate success rates
   Object.keys(chartData).forEach(date => {
     const dayJobs = jobs?.filter(job => 
       new Date(job.print_start).toISOString().split('T')[0] === date && (!isActiveStatus(job.status) || job.status === 'in_progress')
@@ -404,7 +305,7 @@ export const useFilamentTypes = () => {
       }
     },
     retry: 1,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
 };
 
@@ -431,6 +332,6 @@ export const usePrinters = () => {
       }
     },
     retry: 1,
-    staleTime: 10 * 60 * 1000, // 10 minutes
+    staleTime: 10 * 60 * 1000,
   });
 };
