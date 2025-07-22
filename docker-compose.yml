@@ -35,7 +35,7 @@ services:
       - PGADMIN_DEFAULT_PASSWORD=admin
       - PGADMIN_CONFIG_SERVER_MODE=False
     ports:
-      - "8089:80"  # pgAdmin web interface
+      - "8089:89"  # pgAdmin web interface
     volumes:
       - pgadmin_data:/var/lib/pgadmin
     depends_on:
