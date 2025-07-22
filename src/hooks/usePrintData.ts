@@ -1,7 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
-import { useDatabaseContext } from '@/contexts/DatabaseContext';
-import { fetchPrintJobsFromDatabase, fetchFilamentTypesFromDatabase, fetchPrintersFromDatabase } from '@/services/database';
+import { supabase } from '@/integrations/supabase/client';
 
 // Mock data for development - keep for fallback
 const generateMockData = (count: number): PrintJob[] => {
@@ -71,59 +70,71 @@ const calculateMetrics = (data: PrintJob[]): MetricData => {
   };
 };
 
+// Print Job Data Fetching from Supabase
 export const usePrintJobs = (filters: FilterState) => {
-  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
-  
   return useQuery({
-    queryKey: ['printJobs', filters, connectionStatus.isConnected, isUsingMockData],
+    queryKey: ['printJobs', filters],
     queryFn: async () => {
-      console.log('Database connected:', connectionStatus.isConnected);
-      console.log('Using mock data:', isUsingMockData);
+      console.info('Fetching print jobs from Supabase');
       
-      // Use Python API if connected and not using mock data
-      if (connectionStatus.isConnected && !isUsingMockData) {
-        try {
-          console.log('Fetching data from Python API');
-          const apiData = await fetchPrintJobsFromDatabase(config, filters);
-          console.log(`Fetched and filtered ${apiData.length} jobs from API`);
-          return apiData;
-        } catch (error) {
-          console.error('Failed to fetch API data:', error);
-          // Fall back to mock data if API fetch fails
-          console.log('Falling back to mock data due to API error');
-          const mockData = generateMockData(150);
-          
-          // Apply the same filtering logic to mock data
-          const getDateRangeStart = (range: FilterState['dateRange']): Date => {
-            const now = new Date();
-            switch (range) {
-              case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-              case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-              case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
-              case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-              case 'ALL': return new Date(2020, 0, 1);
-              default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            }
-          };
+      try {
+        const { data, error } = await supabase
+          .from('print_jobs')
+          .select('*');
 
-          const startDate = getDateRangeStart(filters.dateRange);
-          
-          return mockData.filter(job => {
-            const jobDate = new Date(job.print_start);
-            const dateInRange = jobDate >= startDate;
-            const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
-            const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
-            
-            return dateInRange && filamentMatch && printerMatch;
-          });
+        if (error) {
+          console.error('Supabase error:', error);
+          throw error;
         }
-      } else {
-        // Use mock data
-        console.log('Using mock data - generating 150 entries');
+
+        // Convert Supabase data to PrintJob format
+        const convertedData: PrintJob[] = (data || []).map(row => ({
+          id: row.id,
+          filename: row.filename || '',
+          status: (row.status as PrintJob['status']) || 'completed',
+          total_duration: row.total_duration || 0,
+          filament_total: row.filament_total || 0,
+          filament_type: row.filament_type || 'PLA',
+          print_start: new Date(row.print_start * 1000),
+          print_end: new Date(row.print_end * 1000),
+          filament_weight: row.filament_weight || 0,
+          printer_name: row.printer_name || 'Unknown',
+        }));
+
+        // Apply filters
+        const getDateRangeStart = (range: FilterState['dateRange']): Date => {
+          const now = new Date();
+          switch (range) {
+            case '1W': return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            case '1M': return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            case '3M': return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+            case '6M': return new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+            case '1Y': return new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+            case 'ALL': return new Date(2020, 0, 1);
+            default: return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+          }
+        };
+
+        const startDate = getDateRangeStart(filters.dateRange);
+        
+        const filteredData = convertedData.filter(job => {
+          const jobDate = new Date(job.print_start);
+          const dateInRange = jobDate >= startDate;
+          const filamentMatch = filters.filamentTypes.length === 0 || filters.filamentTypes.includes(job.filament_type);
+          const printerMatch = filters.printers.length === 0 || filters.printers.includes(job.printer_name);
+          
+          return dateInRange && filamentMatch && printerMatch;
+        });
+
+        console.info(`Fetched ${convertedData.length} print jobs, ${filteredData.length} after filtering`);
+        return filteredData;
+      } catch (error) {
+        console.error('Failed to fetch from Supabase, falling back to mock data:', error);
+        
+        // Fallback to mock data
+        console.info('Using mock data - generating 150 entries');
         const mockData = generateMockData(150);
         
-        // Apply filtering to mock data
         const getDateRangeStart = (range: FilterState['dateRange']): Date => {
           const now = new Date();
           switch (range) {
@@ -149,6 +160,7 @@ export const usePrintJobs = (filters: FilterState) => {
         });
       }
     },
+    retry: 1,
     staleTime: 5 * 60 * 1000, // 5 minutes
   });
 };
@@ -201,42 +213,58 @@ export const useChartData = (filters: FilterState) => {
   };
 };
 
+// Filament Types Hook - fetch from Supabase
 export const useFilamentTypes = () => {
-  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
-  
   return useQuery({
-    queryKey: ['filamentTypes', connectionStatus.isConnected, isUsingMockData],
+    queryKey: ['filamentTypes'],
     queryFn: async () => {
-      if (connectionStatus.isConnected && !isUsingMockData) {
-        try {
-          return await fetchFilamentTypesFromDatabase(config);
-        } catch (error) {
-          console.error('Failed to fetch filament types from API:', error);
-          return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+      try {
+        const { data, error } = await supabase
+          .from('print_jobs')
+          .select('filament_type')
+          .not('filament_type', 'is', null);
+
+        if (error) {
+          console.error('Error fetching filament types:', error);
+          throw error;
         }
-      } else {
+
+        const types = [...new Set(data?.map(row => row.filament_type).filter(Boolean) || [])].sort();
+        return types.length > 0 ? types : ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+      } catch (error) {
+        console.error('Failed to fetch filament types from Supabase:', error);
         return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
       }
     },
+    retry: 1,
+    staleTime: 10 * 60 * 1000, // 10 minutes
   });
 };
 
+// Printers Hook - fetch from Supabase
 export const usePrinters = () => {
-  const { connectionStatus, isUsingMockData, config } = useDatabaseContext();
-  
   return useQuery({
-    queryKey: ['printers', connectionStatus.isConnected, isUsingMockData],
+    queryKey: ['printers'],
     queryFn: async () => {
-      if (connectionStatus.isConnected && !isUsingMockData) {
-        try {
-          return await fetchPrintersFromDatabase(config);
-        } catch (error) {
-          console.error('Failed to fetch printers from API:', error);
-          return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+      try {
+        const { data, error } = await supabase
+          .from('print_jobs')
+          .select('printer_name')
+          .not('printer_name', 'is', null);
+
+        if (error) {
+          console.error('Error fetching printers:', error);
+          throw error;
         }
-      } else {
+
+        const printers = [...new Set(data?.map(row => row.printer_name).filter(Boolean) || [])].sort();
+        return printers.length > 0 ? printers : ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+      } catch (error) {
+        console.error('Failed to fetch printers from Supabase:', error);
         return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
       }
     },
+    retry: 1,
+    staleTime: 10 * 60 * 1000, // 10 minutes
   });
 };
