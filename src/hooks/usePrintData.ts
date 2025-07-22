@@ -123,7 +123,8 @@ export const usePrintJobs = (filters: FilterState) => {
       try {
         const { data, error } = await supabase
           .from('print_jobs')
-          .select('*');
+          .select('*')
+          .limit(2000); // Increase limit to get all data
 
         if (error) {
           console.error('Supabase error:', error);
@@ -138,10 +139,10 @@ export const usePrintJobs = (filters: FilterState) => {
           const printStart = new Date(row.print_start * 1000);
           const printEnd = new Date(row.print_end * 1000);
           
-          // Convert duration from seconds to minutes
+          // Duration is already in seconds, convert to minutes for display
           const durationMinutes = (row.total_duration || 0) / 60;
           
-          // Convert filament from mm to meters
+          // Based on DB totals (~62M), filament appears to be in mm, convert to meters
           const filamentMeters = (row.filament_total || 0) / 1000;
           
           return {
