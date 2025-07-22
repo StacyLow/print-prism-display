@@ -9,6 +9,21 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "0.0.0.0", // Bind to all network interfaces
     port: 8080,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        secure: false,
+        configure: (proxy, options) => {
+          proxy.on('error', (err, req, res) => {
+            console.log('Proxy error:', err);
+          });
+          proxy.on('proxyReq', (proxyReq, req, res) => {
+            console.log('Proxying request:', req.method, req.url);
+          });
+        }
+      }
+    }
   },
   preview: {
     host: "0.0.0.0",
