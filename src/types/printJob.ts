@@ -12,6 +12,11 @@ export interface PrintJob {
   printer_name: string;
 }
 
+export interface TrendData {
+  value: number;
+  isPositive: boolean;
+}
+
 export interface MetricData {
   totalPrintTime: number;
   totalFilamentLength: number;
@@ -26,6 +31,19 @@ export interface MetricData {
     server_exit: number;
     klippy_shutdown: number;
     in_progress: number;
+  };
+  mostUsedFilament: {
+    type: string;
+    count: number;
+    percentage: number;
+  };
+  trends?: {
+    totalPrintTime: TrendData;
+    totalFilamentLength: TrendData;
+    totalFilamentWeight: TrendData;
+    successRate: TrendData;
+    totalJobs: TrendData;
+    avgPrintTime: TrendData;
   };
 }
 

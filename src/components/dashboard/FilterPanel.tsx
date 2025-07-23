@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,7 +14,7 @@ interface FilterPanelProps {
   filters: FilterState;
   onFiltersChange: (filters: FilterState) => void;
   availableFilamentTypes: string[];
-  availablePrinters: string[];
+  availablePrinters: Array<{ name: string; emoji: string }>;
 }
 
 const dateRangeOptions: { value: DateRange; label: string }[] = [
@@ -42,10 +43,10 @@ export function FilterPanel({
     updateFilters({ filamentTypes: newTypes });
   };
 
-  const togglePrinter = (printer: string) => {
-    const newPrinters = filters.printers.includes(printer)
-      ? filters.printers.filter(p => p !== printer)
-      : [...filters.printers, printer];
+  const togglePrinter = (printerName: string) => {
+    const newPrinters = filters.printers.includes(printerName)
+      ? filters.printers.filter(p => p !== printerName)
+      : [...filters.printers, printerName];
     updateFilters({ printers: newPrinters });
   };
 
@@ -183,17 +184,18 @@ export function FilterPanel({
               <div className="space-y-2">
                 <Label className="text-sm font-medium">Select printers:</Label>
                 {availablePrinters.map((printer) => (
-                  <div key={printer} className="flex items-center space-x-2">
+                  <div key={printer.name} className="flex items-center space-x-2">
                     <Checkbox
-                      id={`printer-${printer}`}
-                      checked={filters.printers.includes(printer)}
-                      onCheckedChange={() => togglePrinter(printer)}
+                      id={`printer-${printer.name}`}
+                      checked={filters.printers.includes(printer.name)}
+                      onCheckedChange={() => togglePrinter(printer.name)}
                     />
                     <Label
-                      htmlFor={`printer-${printer}`}
-                      className="text-sm font-normal cursor-pointer"
+                      htmlFor={`printer-${printer.name}`}
+                      className="text-sm font-normal cursor-pointer flex items-center gap-2"
                     >
-                      {printer}
+                      <span>{printer.emoji}</span>
+                      {printer.name}
                     </Label>
                   </div>
                 ))}
@@ -202,16 +204,19 @@ export function FilterPanel({
           </Popover>
           {filters.printers.length > 0 && (
             <div className="flex flex-wrap gap-1">
-              {filters.printers.map((printer) => (
-                <Badge
-                  key={printer}
-                  variant="secondary"
-                  className="text-xs cursor-pointer"
-                  onClick={() => togglePrinter(printer)}
-                >
-                  {printer} ×
-                </Badge>
-              ))}
+              {filters.printers.map((printerName) => {
+                const printer = availablePrinters.find(p => p.name === printerName);
+                return (
+                  <Badge
+                    key={printerName}
+                    variant="secondary"
+                    className="text-xs cursor-pointer"
+                    onClick={() => togglePrinter(printerName)}
+                  >
+                    {printer?.emoji} {printerName} ×
+                  </Badge>
+                );
+              })}
             </div>
           )}
         </div>

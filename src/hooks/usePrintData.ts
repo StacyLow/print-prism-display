@@ -1,4 +1,3 @@
-
 import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,6 +42,61 @@ const getDateRangeStart = async (range: FilterState['dateRange']): Promise<Date>
   }
 };
 
+// Helper function to get previous period start/end dates
+const getPreviousPeriodDates = async (range: FilterState['dateRange']): Promise<{ start: Date; end: Date }> => {
+  if (range === 'ALL') {
+    return { start: new Date('2020-01-01'), end: new Date() };
+  }
+
+  try {
+    const { data: latestJob } = await supabase
+      .from('print_jobs')
+      .select('print_start')
+      .order('print_start', { ascending: false })
+      .limit(1)
+      .single();
+
+    const latestDate = latestJob ? new Date(latestJob.print_start * 1000) : new Date();
+    
+    let currentStart: Date;
+    let periodLength: number;
+    
+    switch (range) {
+      case '1W': 
+        periodLength = 7 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+        break;
+      case '1M':
+        periodLength = 30 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+        break;
+      case '3M':
+        periodLength = 90 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+        break;
+      case '6M':
+        periodLength = 180 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+        break;
+      case '1Y':
+        periodLength = 365 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+        break;
+      default:
+        periodLength = 30 * 24 * 60 * 60 * 1000;
+        currentStart = new Date(latestDate.getTime() - periodLength);
+    }
+
+    const previousStart = new Date(currentStart.getTime() - periodLength);
+    const previousEnd = currentStart;
+
+    return { start: previousStart, end: previousEnd };
+  } catch (error) {
+    console.error('Error calculating previous period:', error);
+    return { start: new Date('2020-01-01'), end: new Date() };
+  }
+};
+
 // Function to get all real data from database
 const getAllRealData = async (filters: FilterState): Promise<MetricData | null> => {
   try {
@@ -56,7 +110,8 @@ const getAllRealData = async (filters: FilterState): Promise<MetricData | null> 
         filament_weight,
         status,
         print_start,
-        id
+        id,
+        filament_type
       `);
 
     // CRITICAL: Only apply date filtering if NOT "ALL"
@@ -79,7 +134,6 @@ const getAllRealData = async (filters: FilterState): Promise<MetricData | null> 
       console.log('🖨️ Applied printer filter:', filters.printers);
     }
 
-    // CRITICAL: Remove ALL limits to get every single row
     console.log('🚀 Fetching ALL rows without limits...');
     const { data, error } = await query;
 
@@ -113,11 +167,28 @@ const getAllRealData = async (filters: FilterState): Promise<MetricData | null> 
     const totalFilamentLength = allJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0); // Convert mm to meters
     const totalFilamentWeight = allJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0); // Keep in grams
 
+    // Calculate most used filament type
+    const filamentCounts = allJobs.reduce((acc, job) => {
+      if (job.filament_type) {
+        // Clean up filament type (remove duplicates like "PLA;PLA")
+        const cleanType = job.filament_type.split(';')[0].trim().toUpperCase();
+        if (cleanType && cleanType.length <= 10) { // Filter out overly long entries
+          acc[cleanType] = (acc[cleanType] || 0) + 1;
+        }
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const mostUsedFilament = Object.entries(filamentCounts).reduce((a, b) => 
+      filamentCounts[a[0]] > filamentCounts[b[0]] ? a : b
+    , Object.entries(filamentCounts)[0] || ['PLA', 0]);
+
     console.log('🧮 Calculated totals:');
     console.log(`   Total Jobs: ${allJobs.length}`);
     console.log(`   Total Print Time: ${(totalPrintTime / 60).toFixed(1)} hours`);
     console.log(`   Total Filament Length: ${(totalFilamentLength / 1000).toFixed(1)} km`);
     console.log(`   Total Filament Weight: ${(totalFilamentWeight / 1000).toFixed(1)} kg`);
+    console.log(`   Most Used Filament: ${mostUsedFilament[0]} (${mostUsedFilament[1]} jobs)`);
 
     const metrics: MetricData = {
       totalPrintTime,
@@ -133,6 +204,11 @@ const getAllRealData = async (filters: FilterState): Promise<MetricData | null> 
         server_exit: failedJobs.filter(job => job.status === 'server_exit').length,
         klippy_shutdown: failedJobs.filter(job => job.status === 'klippy_shutdown').length,
         in_progress: inProgressJobs.length
+      },
+      mostUsedFilament: {
+        type: mostUsedFilament[0],
+        count: mostUsedFilament[1],
+        percentage: allJobs.length > 0 ? (mostUsedFilament[1] / allJobs.length) * 100 : 0
       }
     };
 
@@ -140,6 +216,102 @@ const getAllRealData = async (filters: FilterState): Promise<MetricData | null> 
     return metrics;
   } catch (error) {
     console.error('💥 Error in getAllRealData:', error);
+    return null;
+  }
+};
+
+// Get previous period data for comparison
+const getPreviousPeriodData = async (filters: FilterState): Promise<MetricData | null> => {
+  if (filters.dateRange === 'ALL') {
+    return null; // Can't compare "all time" with a previous period
+  }
+
+  try {
+    const { start, end } = await getPreviousPeriodDates(filters.dateRange);
+    
+    let query = supabase
+      .from('print_jobs')
+      .select(`
+        total_duration,
+        filament_total,
+        filament_weight,
+        status,
+        print_start,
+        id,
+        filament_type
+      `)
+      .gte('print_start', Math.floor(start.getTime() / 1000))
+      .lt('print_start', Math.floor(end.getTime() / 1000));
+
+    // Apply same filters as current period
+    if (filters.filamentTypes.length > 0) {
+      query = query.in('filament_type', filters.filamentTypes);
+    }
+    if (filters.printers.length > 0) {
+      query = query.in('printer_name', filters.printers);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('❌ Previous period query error:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) {
+      console.log('⚠️ No previous period data');
+      return null;
+    }
+
+    console.log(`📊 Previous period: ${data.length} jobs`);
+
+    const allJobs = data;
+    const completedJobs = allJobs.filter(job => job.status === 'completed');
+    const failedJobs = allJobs.filter(job => ['cancelled', 'interrupted', 'server_exit', 'klippy_shutdown'].includes(job.status || ''));
+    const inProgressJobs = allJobs.filter(job => job.status === 'in_progress');
+    const nonActiveJobs = allJobs.filter(job => job.status !== 'in_progress');
+
+    const totalPrintTime = allJobs.reduce((sum, job) => sum + ((job.total_duration || 0) / 60), 0);
+    const totalFilamentLength = allJobs.reduce((sum, job) => sum + ((job.filament_total || 0) / 1000), 0);
+    const totalFilamentWeight = allJobs.reduce((sum, job) => sum + (job.filament_weight || 0), 0);
+
+    const filamentCounts = allJobs.reduce((acc, job) => {
+      if (job.filament_type) {
+        const cleanType = job.filament_type.split(';')[0].trim().toUpperCase();
+        if (cleanType && cleanType.length <= 10) {
+          acc[cleanType] = (acc[cleanType] || 0) + 1;
+        }
+      }
+      return acc;
+    }, {} as Record<string, number>);
+
+    const mostUsedFilament = Object.entries(filamentCounts).reduce((a, b) => 
+      filamentCounts[a[0]] > filamentCounts[b[0]] ? a : b
+    , Object.entries(filamentCounts)[0] || ['PLA', 0]);
+
+    return {
+      totalPrintTime,
+      totalFilamentLength,
+      totalFilamentWeight,
+      successRate: nonActiveJobs.length > 0 ? (completedJobs.length / nonActiveJobs.length) * 100 : 0,
+      totalJobs: allJobs.length,
+      avgPrintTime: allJobs.length > 0 ? totalPrintTime / allJobs.length : 0,
+      statusBreakdown: {
+        completed: completedJobs.length,
+        cancelled: failedJobs.filter(job => job.status === 'cancelled').length,
+        interrupted: failedJobs.filter(job => job.status === 'interrupted').length,
+        server_exit: failedJobs.filter(job => job.status === 'server_exit').length,
+        klippy_shutdown: failedJobs.filter(job => job.status === 'klippy_shutdown').length,
+        in_progress: inProgressJobs.length
+      },
+      mostUsedFilament: {
+        type: mostUsedFilament[0],
+        count: mostUsedFilament[1],
+        percentage: allJobs.length > 0 ? (mostUsedFilament[1] / allJobs.length) * 100 : 0
+      }
+    };
+  } catch (error) {
+    console.error('💥 Error getting previous period data:', error);
     return null;
   }
 };
@@ -228,15 +400,38 @@ export const usePrintMetrics = (filters: FilterState) => {
     queryFn: async () => {
       console.log('📈 usePrintMetrics: Starting metrics calculation');
       
-      // ALWAYS use real data - no fallback to mock
-      const realMetrics = await getAllRealData(filters);
-      if (realMetrics) {
-        console.log('✅ usePrintMetrics: Using real database metrics');
-        return realMetrics;
+      const currentMetrics = await getAllRealData(filters);
+      if (!currentMetrics) {
+        console.error('💥 usePrintMetrics: Failed to get real metrics - throwing error');
+        throw new Error('Failed to fetch real metrics from database');
       }
-      
-      console.error('💥 usePrintMetrics: Failed to get real metrics - throwing error');
-      throw new Error('Failed to fetch real metrics from database');
+
+      // If comparison is enabled, get previous period data
+      if (filters.compareEnabled) {
+        const previousMetrics = await getPreviousPeriodData(filters);
+        if (previousMetrics) {
+          // Calculate trends
+          const calculateTrend = (current: number, previous: number) => {
+            if (previous === 0) return { value: 0, isPositive: true };
+            const change = ((current - previous) / previous) * 100;
+            return { value: Math.abs(change), isPositive: change >= 0 };
+          };
+
+          currentMetrics.trends = {
+            totalPrintTime: calculateTrend(currentMetrics.totalPrintTime, previousMetrics.totalPrintTime),
+            totalFilamentLength: calculateTrend(currentMetrics.totalFilamentLength, previousMetrics.totalFilamentLength),
+            totalFilamentWeight: calculateTrend(currentMetrics.totalFilamentWeight, previousMetrics.totalFilamentWeight),
+            successRate: calculateTrend(currentMetrics.successRate, previousMetrics.successRate),
+            totalJobs: calculateTrend(currentMetrics.totalJobs, previousMetrics.totalJobs),
+            avgPrintTime: calculateTrend(currentMetrics.avgPrintTime, previousMetrics.avgPrintTime),
+          };
+
+          console.log('📊 Trends calculated:', currentMetrics.trends);
+        }
+      }
+
+      console.log('✅ usePrintMetrics: Using real database metrics');
+      return currentMetrics;
     },
     retry: 1,
     staleTime: 2 * 60 * 1000,
@@ -281,7 +476,30 @@ export const useChartData = (filters: FilterState) => {
   };
 };
 
-// Filament Types Hook - fetch from Supabase
+// Clean up filament types to remove duplicates like "PLA;PLA" and weird entries
+const cleanFilamentType = (type: string): string | null => {
+  if (!type) return null;
+  
+  // Split by semicolon and take the first part
+  const cleaned = type.split(';')[0].trim().toUpperCase();
+  
+  // Filter out empty strings, overly long entries, and invalid characters
+  if (!cleaned || cleaned.length > 10 || /[^A-Z0-9+\-]/.test(cleaned)) {
+    return null;
+  }
+  
+  // Common filament types we want to keep
+  const validTypes = ['PLA', 'ABS', 'PETG', 'ASA', 'TPU', 'FLEX', 'WOOD', 'METAL', 'CARBON', 'GLASS', 'SILK', 'MARBLE', 'GLOW', 'CLEAR', 'TRANSPARENT', 'BLACK', 'WHITE', 'RED', 'BLUE', 'GREEN', 'YELLOW', 'ORANGE', 'PURPLE', 'GRAY', 'GREY', 'SILVER', 'GOLD', 'BRONZE'];
+  
+  // If it's a known type or follows common patterns, keep it
+  if (validTypes.includes(cleaned) || /^[A-Z]{2,6}$/.test(cleaned)) {
+    return cleaned;
+  }
+  
+  return null;
+};
+
+// Filament Types Hook - fetch from Supabase with cleaning
 export const useFilamentTypes = () => {
   return useQuery({
     queryKey: ['filamentTypes'],
@@ -297,16 +515,37 @@ export const useFilamentTypes = () => {
           throw error;
         }
 
-        const types = [...new Set(data?.map(row => row.filament_type).filter(Boolean) || [])].sort();
-        return types.length > 0 ? types : ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+        // Clean and deduplicate filament types
+        const cleanedTypes = data
+          ?.map(row => cleanFilamentType(row.filament_type))
+          .filter(Boolean) as string[];
+
+        const uniqueTypes = [...new Set(cleanedTypes)].sort();
+        
+        console.log('🧵 Cleaned filament types:', uniqueTypes);
+        
+        return uniqueTypes.length > 0 ? uniqueTypes : ['PLA', 'ABS', 'PETG', 'ASA', 'TPU'];
       } catch (error) {
         console.error('Failed to fetch filament types from Supabase:', error);
-        return ['PLA', 'ABS', 'PETG', 'ASA', 'FLEX'];
+        return ['PLA', 'ABS', 'PETG', 'ASA', 'TPU'];
       }
     },
     retry: 1,
     staleTime: 10 * 60 * 1000,
   });
+};
+
+// Printer names with emojis mapping
+const printerEmojis: Record<string, string> = {
+  'Bumblebee': '🐝',
+  'Sentinel': '🛡️',
+  'Micron': '🔬',
+  'Drill Sargeant': '🪖',
+  'VZBot': '🤖',
+  'Blorange': '🍊',
+  'Pinky': '🌸',
+  'Berries and Cream': '🍓',
+  'Slate': '🪨',
 };
 
 export const usePrinters = () => {
@@ -325,10 +564,37 @@ export const usePrinters = () => {
         }
 
         const printers = [...new Set(data?.map(row => row.printer_name).filter(Boolean) || [])].sort();
-        return printers.length > 0 ? printers : ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+        
+        // Add emojis to printer names
+        const printersWithEmojis = printers.map(printer => ({
+          name: printer,
+          emoji: printerEmojis[printer] || '🖨️'
+        }));
+        
+        return printersWithEmojis.length > 0 ? printersWithEmojis : [
+          { name: 'Bumblebee', emoji: '🐝' },
+          { name: 'Sentinel', emoji: '🛡️' },
+          { name: 'Micron', emoji: '🔬' },
+          { name: 'Drill Sargeant', emoji: '🪖' },
+          { name: 'VZBot', emoji: '🤖' },
+          { name: 'Blorange', emoji: '🍊' },
+          { name: 'Pinky', emoji: '🌸' },
+          { name: 'Berries and Cream', emoji: '🍓' },
+          { name: 'Slate', emoji: '🪨' },
+        ];
       } catch (error) {
         console.error('Failed to fetch printers from Supabase:', error);
-        return ['Bumblebee', 'Sentinel', 'Micron', 'Drill Sargeant', 'VZBot', 'Blorange', 'Pinky', 'Berries and Cream', 'Slate'];
+        return [
+          { name: 'Bumblebee', emoji: '🐝' },
+          { name: 'Sentinel', emoji: '🛡️' },
+          { name: 'Micron', emoji: '🔬' },
+          { name: 'Drill Sargeant', emoji: '🪖' },
+          { name: 'VZBot', emoji: '🤖' },
+          { name: 'Blorange', emoji: '🍊' },
+          { name: 'Pinky', emoji: '🌸' },
+          { name: 'Berries and Cream', emoji: '🍓' },
+          { name: 'Slate', emoji: '🪨' },
+        ];
       }
     },
     retry: 1,

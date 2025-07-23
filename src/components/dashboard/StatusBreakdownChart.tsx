@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from "recharts";
 import { MetricData } from "@/types/printJob";
-import { Activity, AlertTriangle } from "lucide-react";
+import { Activity, AlertTriangle, Package } from "lucide-react";
 
 interface StatusBreakdownChartProps {
   data: MetricData | undefined;
@@ -64,7 +64,6 @@ export function StatusBreakdownChart({ data, isLoading }: StatusBreakdownChartPr
       color: statusColors[status as keyof typeof statusColors],
     }));
 
-  const activeJobs = data.statusBreakdown.in_progress;
   const failedJobs = data.statusBreakdown.cancelled + data.statusBreakdown.interrupted + 
                      data.statusBreakdown.server_exit + data.statusBreakdown.klippy_shutdown;
 
@@ -87,15 +86,18 @@ export function StatusBreakdownChart({ data, isLoading }: StatusBreakdownChartPr
                   cy="50%"
                   outerRadius={80}
                   dataKey="value"
-                  label={({ name, value, percent }) => 
-                    `${name}: ${value} (${(percent! * 100).toFixed(0)}%)`
-                  }
                 >
                   {chartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
                 <ChartTooltip content={<ChartTooltipContent />} />
+                <Legend 
+                  verticalAlign="bottom" 
+                  height={36}
+                  iconType="circle"
+                  wrapperStyle={{ paddingTop: '20px' }}
+                />
               </PieChart>
             </ChartContainer>
           </div>
@@ -103,10 +105,14 @@ export function StatusBreakdownChart({ data, isLoading }: StatusBreakdownChartPr
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center p-3 border rounded-lg">
-                <div className="text-2xl font-bold text-primary">
-                  {activeJobs}
+                <div className="text-2xl font-bold text-primary flex items-center justify-center gap-1">
+                  <Package className="h-5 w-5" />
+                  {data.mostUsedFilament.type}
                 </div>
-                <div className="text-sm text-muted-foreground">Active Jobs</div>
+                <div className="text-sm text-muted-foreground">Most Used Filament</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {data.mostUsedFilament.count} jobs ({data.mostUsedFilament.percentage.toFixed(1)}%)
+                </div>
               </div>
               
               <div className="text-center p-3 border rounded-lg">
@@ -115,6 +121,9 @@ export function StatusBreakdownChart({ data, isLoading }: StatusBreakdownChartPr
                   {failedJobs}
                 </div>
                 <div className="text-sm text-muted-foreground">Failed Jobs</div>
+                <div className="text-xs text-muted-foreground mt-1">
+                  {data.totalJobs > 0 ? ((failedJobs / data.totalJobs) * 100).toFixed(1) : 0}% failure rate
+                </div>
               </div>
             </div>
             

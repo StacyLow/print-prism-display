@@ -109,37 +109,37 @@ export default function Dashboard() {
                 title="Total Print Time"
                 value={metrics ? formatTime(metrics.totalPrintTime) : "0h"}
                 icon={<Clock className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: 12.5, isPositive: true } : undefined}
+                trend={metrics?.trends?.totalPrintTime}
               />
               <MetricCard
                 title="Filament Length Used"
                 value={metrics ? formatLength(metrics.totalFilamentLength) : "0m"}
                 icon={<Package className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: 8.2, isPositive: true } : undefined}
+                trend={metrics?.trends?.totalFilamentLength}
               />
               <MetricCard
                 title="Filament Weight Used"
                 value={metrics ? formatWeight(metrics.totalFilamentWeight) : "0g"}
                 icon={<Weight className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: -3.1, isPositive: false } : undefined}
+                trend={metrics?.trends?.totalFilamentWeight}
               />
               <MetricCard
                 title="Success Rate"
                 value={metrics ? `${metrics.successRate.toFixed(1)}%` : "0%"}
                 icon={<CheckCircle className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: 2.3, isPositive: true } : undefined}
+                trend={metrics?.trends?.successRate}
               />
               <MetricCard
                 title="Total Jobs"
                 value={metrics?.totalJobs || 0}
                 icon={<BarChart3 className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: 15.7, isPositive: true } : undefined}
+                trend={metrics?.trends?.totalJobs}
               />
               <MetricCard
                 title="Avg Print Time"
                 value={metrics ? formatTime(metrics.avgPrintTime) : "0h"}
                 icon={<Timer className="h-4 w-4" />}
-                trend={filters.compareEnabled ? { value: -5.4, isPositive: false } : undefined}
+                trend={metrics?.trends?.avgPrintTime}
               />
             </div>
 
