@@ -206,7 +206,7 @@ export default function Settings() {
                   </div>
                    <div className="flex items-center space-x-2">
                      <RadioGroupItem value="postgres" id="postgres" />
-                     <Label htmlFor="postgres">Direct PostgreSQL Connection</Label>
+                     <Label htmlFor="postgres">Direct PostgreSQL Connection (Browser Limitation)</Label>
                    </div>
                 </RadioGroup>
               </div>
@@ -318,9 +318,9 @@ export default function Settings() {
                     <Label htmlFor="postgres-ssl">Enable SSL</Label>
                   </div>
                   
-                   <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded-md border border-blue-200">
-                     <p className="font-medium text-blue-800">PostgreSQL Configuration</p>
-                     <p className="text-blue-700">Direct PostgreSQL connections are now supported. Make sure your database has the required tables and structure.</p>
+                   <div className="text-sm text-muted-foreground bg-orange-50 p-3 rounded-md border border-orange-200">
+                     <p className="font-medium text-orange-800">Browser Limitation</p>
+                     <p className="text-orange-700">Direct PostgreSQL connections aren't supported in browsers. For PostgreSQL, deploy this app with a backend API or use Supabase.</p>
                    </div>
                 </div>
               )}
