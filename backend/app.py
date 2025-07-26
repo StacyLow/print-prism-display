@@ -7,7 +7,7 @@ from datetime import datetime
 import traceback
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://192.168.1.139:3000"}})
+CORS(app, resources={r"/api/*": {"origins": "*"}})
 
 def get_db_connection(config):
     """Create database connection from config"""
