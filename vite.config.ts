@@ -41,6 +41,6 @@ export default defineConfig(({ mode }) => ({
   },
   define: {
     // Make environment variables available at build time
-    'import.meta.env.VITE_BACKEND_API_URL': JSON.stringify(process.env.VITE_API_URL || ''),
+    'import.meta.env.VITE_BACKEND_API_URL': JSON.stringify(process.env.VITE_BACKEND_API_URL || ''),
   },
 }));
