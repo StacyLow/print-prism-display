@@ -2,14 +2,18 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Get config from localStorage - no defaults for security
+// Get config from localStorage - read from database-config
 const getSupabaseConfig = () => {
-  const stored = localStorage.getItem('supabase-config');
+  const stored = localStorage.getItem('database-config');
   if (stored) {
     try {
       const parsed = JSON.parse(stored);
-      if (parsed.url && parsed.anonKey) {
-        return parsed;
+      // Check if it's a Supabase configuration with nested structure
+      if (parsed.type === 'supabase' && parsed.supabase?.url && parsed.supabase?.anonKey) {
+        return {
+          url: parsed.supabase.url,
+          anonKey: parsed.supabase.anonKey
+        };
       }
     } catch {
       // Fall through to empty config
