@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, XCircle, Save, RotateCcw, TestTube, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, XCircle, Save, RotateCcw, TestTube, AlertTriangle, Info } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDatabaseConfig } from "@/hooks/useDatabaseConfig";
 import { useState } from "react";
@@ -206,7 +206,7 @@ export default function Settings() {
                   </div>
                    <div className="flex items-center space-x-2">
                      <RadioGroupItem value="postgres" id="postgres" />
-                     <Label htmlFor="postgres">Direct PostgreSQL Connection (Browser Limitation)</Label>
+                     <Label htmlFor="postgres">PostgreSQL via Backend API</Label>
                    </div>
                 </RadioGroup>
               </div>
@@ -253,14 +253,29 @@ export default function Settings() {
                 <div className="space-y-4 border rounded-lg p-4 bg-card">
                   <h4 className="font-medium">PostgreSQL Configuration</h4>
                   
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-4">
+                    <div className="flex items-start">
+                      <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-2 flex-shrink-0" />
+                      <div>
+                        <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                          PostgreSQL via Backend API
+                        </h4>
+                        <p className="text-sm text-blue-700 dark:text-blue-300">
+                          PostgreSQL connections are handled through the Flask backend API. 
+                          Make sure the backend service is running and accessible.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="postgres-host">Host</Label>
+                      <Label htmlFor="postgres-host">Host *</Label>
                       <Input
                         id="postgres-host"
                         value={formData.postgres?.host || ''}
                         onChange={(e) => handlePostgresChange('host', e.target.value)}
-                         placeholder="localhost"
+                        placeholder="localhost"
                       />
                     </div>
                     
@@ -271,29 +286,29 @@ export default function Settings() {
                         type="number"
                         value={formData.postgres?.port || 5432}
                         onChange={(e) => handlePostgresChange('port', parseInt(e.target.value))}
-                         placeholder="5432"
+                        placeholder="5432"
                       />
                     </div>
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="postgres-database">Database Name</Label>
+                    <Label htmlFor="postgres-database">Database Name *</Label>
                     <Input
                       id="postgres-database"
                       value={formData.postgres?.database || ''}
                       onChange={(e) => handlePostgresChange('database', e.target.value)}
-                       placeholder="printer_dashboard"
+                      placeholder="printer_dashboard"
                     />
                   </div>
                   
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="postgres-username">Username</Label>
+                      <Label htmlFor="postgres-username">Username *</Label>
                       <Input
                         id="postgres-username"
                         value={formData.postgres?.username || ''}
                         onChange={(e) => handlePostgresChange('username', e.target.value)}
-                         placeholder="postgres"
+                        placeholder="postgres"
                       />
                     </div>
                     
@@ -304,24 +319,19 @@ export default function Settings() {
                         type="password"
                         value={formData.postgres?.password || ''}
                         onChange={(e) => handlePostgresChange('password', e.target.value)}
-                         placeholder="password"
+                        placeholder="password"
                       />
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                     <Switch
-                       id="postgres-ssl"
-                       checked={formData.postgres?.ssl || false}
-                       onCheckedChange={(checked) => handlePostgresChange('ssl', checked)}
-                     />
+                    <Switch
+                      id="postgres-ssl"
+                      checked={formData.postgres?.ssl || false}
+                      onCheckedChange={(checked) => handlePostgresChange('ssl', checked)}
+                    />
                     <Label htmlFor="postgres-ssl">Enable SSL</Label>
                   </div>
-                  
-                   <div className="text-sm text-muted-foreground bg-orange-50 p-3 rounded-md border border-orange-200">
-                     <p className="font-medium text-orange-800">Browser Limitation</p>
-                     <p className="text-orange-700">Direct PostgreSQL connections aren't supported in browsers. For PostgreSQL, deploy this app with a backend API or use Supabase.</p>
-                   </div>
                 </div>
               )}
               
