@@ -6,7 +6,7 @@ services:
     container_name: printer-dashboard
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "8080:80"
     environment:
       - NODE_ENV=production
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
@@ -14,7 +14,7 @@ services:
     networks:
       - postgres-database_default
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3

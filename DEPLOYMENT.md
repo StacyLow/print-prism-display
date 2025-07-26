@@ -54,13 +54,13 @@ docker-compose up -d
 ### Access
 
 The dashboard will be available at:
-- **URL**: `http://your-server-ip:3000`
-- **Port**: 3000
+- **URL**: `http://your-server-ip:8080`
+- **Port**: 8080
 
 ### Health Check
 
 The application includes a health check endpoint:
-- **URL**: `http://your-server-ip:3000/health`
+- **URL**: `http://your-server-ip:8080/health`
 
 ### Network Configuration
 
@@ -80,8 +80,8 @@ The Portainer stack includes resource limits:
    - Check container logs in Portainer
 
 2. **Cannot access dashboard:**
-   - Ensure port 3000 is not blocked by firewall
-   - Check if another service is using port 3000
+   - Ensure port 8080 is not blocked by firewall
+   - Check if another service is using port 8080
    - Verify container is running and healthy
 
 3. **Supabase connection issues:**

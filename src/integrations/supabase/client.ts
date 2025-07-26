@@ -2,8 +2,25 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://drkxbrcpjdrophwtcekd.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRya3hicmNwamRyb3Bod3RjZWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODcwNzQsImV4cCI6MjA2ODY2MzA3NH0.2vNdDh37m_sCexlJeNFKWVKQbz8RaAb3AEAKguYMsfs";
+// Get config from localStorage or use defaults
+const getSupabaseConfig = () => {
+  const stored = localStorage.getItem('supabase-config');
+  if (stored) {
+    try {
+      return JSON.parse(stored);
+    } catch {
+      // Fall back to defaults if parsing fails
+    }
+  }
+  return {
+    url: "https://drkxbrcpjdrophwtcekd.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRya3hicmNwamRyb3Bod3RjZWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODcwNzQsImV4cCI6MjA2ODY2MzA3NH0.2vNdDh37m_sCexlJeNFKWVKQbz8RaAb3AEAKguYMsfs"
+  };
+};
+
+const config = getSupabaseConfig();
+const SUPABASE_URL = config.url;
+const SUPABASE_PUBLISHABLE_KEY = config.anonKey;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
