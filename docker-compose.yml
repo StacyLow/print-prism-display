@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  printer-dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: printer-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
+      - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
+    networks:
+      - postgres-database_default
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  postgres-database_default:
+    external: true
