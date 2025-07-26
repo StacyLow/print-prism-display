@@ -31,9 +31,13 @@ def test_connection():
         config = request.json
         conn = get_db_connection(config)
         conn.close()
-        return jsonify({"success": True})
+        response = jsonify({"success": True})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
     except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 400
+        response = jsonify({"success": False, "error": str(e)}), 400
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        return response
 
 @app.route('/api/print-jobs', methods=['GET'])
 def get_print_jobs():
