@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 import psycopg2
 import psycopg2.extras
@@ -23,6 +23,11 @@ def get_db_connection(config):
         return conn
     except Exception as e:
         raise Exception(f"Database connection failed: {str(e)}")
+
+@app.before_request
+def basic_authentication():
+    if request.method.lower() == 'options':
+        return Response()
 
 @app.route('/api/test-connection', methods=['POST'])
 def test_connection():
