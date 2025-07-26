@@ -16,12 +16,14 @@ const getSupabaseConfig = () => {
         };
       }
     } catch {
-      // Fall through to empty config
+      // Fall through to fallback config
     }
   }
+  
+  // Fallback to project defaults if no config or if PostgreSQL is configured
   return {
-    url: '',
-    anonKey: ''
+    url: 'https://drkxbrcpjdrophwtcekd.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRya3hicmNwamRyb3Bod3RjZWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODcwNzQsImV4cCI6MjA2ODY2MzA3NH0.2vNdDh37m_sCexlJeNFKWVKQbz8RaAb3AEAKguYMsfs'
   };
 };
 
