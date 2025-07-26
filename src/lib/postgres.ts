@@ -8,7 +8,7 @@ export class PostgresClient {
   constructor(config: PostgresConfig) {
     this.config = config;
     // Use environment variable or fallback to proxy
-    this.apiUrl = import.meta.env.VITE_BACKEND_API_URL;
+    this.apiUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://192.168.1.139:5000';
   }
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
