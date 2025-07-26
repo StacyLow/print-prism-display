@@ -13,7 +13,7 @@ services:
       - NODE_ENV=production
       - VITE_SUPABASE_URL=${VITE_SUPABASE_URL}
       - VITE_SUPABASE_ANON_KEY=${VITE_SUPABASE_ANON_KEY}
-      - VITE_BACKEND_API_URL=http://backend:5000
+      - VITE_BACKEND_API_URL=http://192.168.1.139:5000
     depends_on:
       - backend
     healthcheck:
