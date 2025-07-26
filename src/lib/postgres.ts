@@ -44,7 +44,7 @@ export class PostgresClient {
         }
         
         const queryString = params.toString();
-        const endpoint = `/print-jobs${queryString ? `?${queryString}` : ''}`;
+        const endpoint = `/api/print-jobs${queryString ? `?${queryString}` : ''}`;
         
         return await this.makeRequest(endpoint);
       }
@@ -69,7 +69,7 @@ export class PostgresClient {
 
   async testConnection(): Promise<boolean> {
     try {
-      const result = await this.makeRequest('/test-connection', {
+      const result = await this.makeRequest('/api/test-connection', {
         method: 'POST',
         body: JSON.stringify(this.config),
       });
@@ -92,7 +92,7 @@ export class PostgresClient {
       }
       
       const queryString = params.toString();
-      const endpoint = `/metrics${queryString ? `?${queryString}` : ''}`;
+      const endpoint = `/api/metrics${queryString ? `?${queryString}` : ''}`;
       
       return await this.makeRequest(endpoint);
     } catch (error) {
@@ -102,7 +102,7 @@ export class PostgresClient {
 
   async getFilamentTypes() {
     try {
-      return await this.makeRequest('/filament-types');
+      return await this.makeRequest('/api/filament-types');
     } catch (error) {
       return [];
     }
@@ -110,7 +110,7 @@ export class PostgresClient {
 
   async getPrinters() {
     try {
-      return await this.makeRequest('/printers');
+      return await this.makeRequest('/api/printers');
     } catch (error) {
       return [];
     }
