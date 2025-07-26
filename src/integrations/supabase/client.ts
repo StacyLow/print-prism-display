@@ -2,19 +2,22 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-// Get config from localStorage or use defaults
+// Get config from localStorage - no defaults for security
 const getSupabaseConfig = () => {
   const stored = localStorage.getItem('supabase-config');
   if (stored) {
     try {
-      return JSON.parse(stored);
+      const parsed = JSON.parse(stored);
+      if (parsed.url && parsed.anonKey) {
+        return parsed;
+      }
     } catch {
-      // Fall back to defaults if parsing fails
+      // Fall through to empty config
     }
   }
   return {
-    url: "https://drkxbrcpjdrophwtcekd.supabase.co",
-    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRya3hicmNwamRyb3Bod3RjZWtkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTMwODcwNzQsImV4cCI6MjA2ODY2MzA3NH0.2vNdDh37m_sCexlJeNFKWVKQbz8RaAb3AEAKguYMsfs"
+    url: '',
+    anonKey: ''
   };
 };
 

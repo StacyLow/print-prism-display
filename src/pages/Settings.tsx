@@ -2,25 +2,104 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, Save, RotateCcw } from "lucide-react";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Switch } from "@/components/ui/switch";
+import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, XCircle, Save, RotateCcw, TestTube, AlertTriangle } from "lucide-react";
 import { Link } from "react-router-dom";
-import { useSupabaseConfig } from "@/hooks/useSupabaseConfig";
+import { useDatabaseConfig } from "@/hooks/useDatabaseConfig";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { DatabaseConfig, DatabaseType } from "@/types/database";
+import { createDatabaseClient } from "@/lib/database";
 
 export default function Settings() {
-  const { config, updateConfig, resetToDefault, isDefaultConfig } = useSupabaseConfig();
+  const { config, updateConfig, resetToEmpty, isConfigured } = useDatabaseConfig();
   const { toast } = useToast();
-  const [formData, setFormData] = useState({
-    url: config.url,
-    anonKey: config.anonKey
-  });
+  const [formData, setFormData] = useState<DatabaseConfig>(config);
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
 
-  const handleSave = () => {
-    if (!formData.url || !formData.anonKey) {
+  const handleTypeChange = (type: DatabaseType) => {
+    setFormData(prev => ({ ...prev, type }));
+  };
+
+  const handleSupabaseChange = (field: keyof NonNullable<DatabaseConfig['supabase']>, value: string) => {
+    setFormData(prev => ({
+      ...prev,
+      supabase: {
+        ...prev.supabase,
+        [field]: value
+      }
+    }));
+  };
+
+  const handlePostgresChange = (field: keyof NonNullable<DatabaseConfig['postgres']>, value: string | number | boolean) => {
+    setFormData(prev => ({
+      ...prev,
+      postgres: {
+        ...prev.postgres,
+        [field]: value
+      }
+    }));
+  };
+
+  const validateConfig = () => {
+    if (formData.type === 'supabase') {
+      if (!formData.supabase?.url || !formData.supabase?.anonKey) {
+        return "Please fill in both Supabase URL and API key";
+      }
+    } else if (formData.type === 'postgres') {
+      if (!formData.postgres?.host || !formData.postgres?.database || !formData.postgres?.username) {
+        return "Please fill in host, database, and username for PostgreSQL";
+      }
+    }
+    return null;
+  };
+
+  const handleTestConnection = async () => {
+    const error = validateConfig();
+    if (error) {
       toast({
         title: "Invalid Configuration",
-        description: "Please fill in both URL and API key",
+        description: error,
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsTestingConnection(true);
+    try {
+      const client = createDatabaseClient(formData);
+      const result = await client.testConnection();
+      
+      if (result.success) {
+        toast({
+          title: "Connection Successful",
+          description: "Database connection test passed!",
+        });
+      } else {
+        toast({
+          title: "Connection Failed",
+          description: result.error || "Unknown error occurred",
+          variant: "destructive"
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Connection Error",
+        description: error instanceof Error ? error.message : "Unknown error occurred",
+        variant: "destructive"
+      });
+    } finally {
+      setIsTestingConnection(false);
+    }
+  };
+
+  const handleSave = () => {
+    const error = validateConfig();
+    if (error) {
+      toast({
+        title: "Invalid Configuration",
+        description: error,
         variant: "destructive"
       });
       return;
@@ -29,15 +108,15 @@ export default function Settings() {
     updateConfig(formData);
     toast({
       title: "Configuration Saved",
-      description: "Supabase configuration updated successfully. The page will reload.",
+      description: "Database configuration updated successfully. The page will reload.",
     });
   };
 
   const handleReset = () => {
-    resetToDefault();
+    resetToEmpty();
     toast({
       title: "Configuration Reset",
-      description: "Restored to default Supabase configuration. The page will reload.",
+      description: "Database configuration cleared. The page will reload.",
     });
   };
 
@@ -66,65 +145,211 @@ export default function Settings() {
         </div>
       </div>
 
-      <div className="container mx-auto px-6 py-6 max-w-2xl">
+      <div className="container mx-auto px-6 py-6 max-w-3xl">
         <div className="space-y-6">
-          {/* Supabase Connection Status */}
+          {/* Configuration Warning */}
+          {!isConfigured && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-2 text-orange-800">
+                  <AlertTriangle className="h-5 w-5" />
+                  <p className="font-medium">Database Not Configured</p>
+                </div>
+                <p className="text-orange-700 mt-1">
+                  Please configure your database connection below to use the application.
+                </p>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Database Configuration */}
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Database className="h-5 w-5" />
-                Database Connection
+                Database Configuration
               </CardTitle>
               <CardDescription>
-                Connected to Supabase for data storage and management
+                Configure your database connection for data storage and management
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+              {/* Connection Status */}
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-600" />
-                <span className="text-sm">Connected to Supabase</span>
-                {!isDefaultConfig && (
-                  <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Custom Config</span>
+                {isConfigured ? (
+                  <>
+                    <CheckCircle className="h-4 w-4 text-green-600" />
+                    <span className="text-sm">Database Configured</span>
+                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                      {formData.type === 'supabase' ? 'Supabase' : 'PostgreSQL'}
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <XCircle className="h-4 w-4 text-red-600" />
+                    <span className="text-sm">Not Configured</span>
+                  </>
                 )}
               </div>
               
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="supabase-url">Supabase URL</Label>
-                  <Input
-                    id="supabase-url"
-                    value={formData.url}
-                    onChange={(e) => setFormData(prev => ({ ...prev, url: e.target.value }))}
-                    placeholder="https://your-project.supabase.co"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="supabase-key">Supabase Anon Key</Label>
-                  <Input
-                    id="supabase-key"
-                    type="password"
-                    value={formData.anonKey}
-                    onChange={(e) => setFormData(prev => ({ ...prev, anonKey: e.target.value }))}
-                    placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-                  />
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button onClick={handleSave} size="sm">
-                    <Save className="h-4 w-4 mr-2" />
-                    Save Configuration
-                  </Button>
-                  <Button onClick={handleReset} variant="outline" size="sm">
-                    <RotateCcw className="h-4 w-4 mr-2" />
-                    Reset to Default
-                  </Button>
-                </div>
+              {/* Database Type Selection */}
+              <div className="space-y-3">
+                <Label>Database Type</Label>
+                <RadioGroup
+                  value={formData.type}
+                  onValueChange={(value) => handleTypeChange(value as DatabaseType)}
+                  className="flex flex-col space-y-2"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="supabase" id="supabase" />
+                    <Label htmlFor="supabase">Supabase (Recommended)</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="postgres" id="postgres" />
+                    <Label htmlFor="postgres">Direct PostgreSQL Connection (Coming Soon)</Label>
+                  </div>
+                </RadioGroup>
               </div>
+
+              {/* Supabase Configuration */}
+              {formData.type === 'supabase' && (
+                <div className="space-y-4 border rounded-lg p-4 bg-card">
+                  <h4 className="font-medium">Supabase Configuration</h4>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="supabase-url">Project URL</Label>
+                    <Input
+                      id="supabase-url"
+                      value={formData.supabase?.url || ''}
+                      onChange={(e) => handleSupabaseChange('url', e.target.value)}
+                      placeholder="https://your-project.supabase.co"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="supabase-key">Anonymous Key</Label>
+                    <Input
+                      id="supabase-key"
+                      type="password"
+                      value={formData.supabase?.anonKey || ''}
+                      onChange={(e) => handleSupabaseChange('anonKey', e.target.value)}
+                      placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                    />
+                  </div>
+                  
+                  <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded-md border border-blue-200">
+                    <p className="font-medium text-blue-800">How to get your Supabase credentials:</p>
+                    <ol className="text-blue-700 mt-1 list-decimal list-inside space-y-1">
+                      <li>Go to your Supabase project dashboard</li>
+                      <li>Navigate to Settings → API</li>
+                      <li>Copy the Project URL and anon/public key</li>
+                    </ol>
+                  </div>
+                </div>
+              )}
+
+              {/* PostgreSQL Configuration */}
+              {formData.type === 'postgres' && (
+                <div className="space-y-4 border rounded-lg p-4 bg-card">
+                  <h4 className="font-medium">PostgreSQL Configuration</h4>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="postgres-host">Host</Label>
+                      <Input
+                        id="postgres-host"
+                        value={formData.postgres?.host || ''}
+                        onChange={(e) => handlePostgresChange('host', e.target.value)}
+                        placeholder="localhost"
+                        disabled
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="postgres-port">Port</Label>
+                      <Input
+                        id="postgres-port"
+                        type="number"
+                        value={formData.postgres?.port || 5432}
+                        onChange={(e) => handlePostgresChange('port', parseInt(e.target.value))}
+                        placeholder="5432"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label htmlFor="postgres-database">Database Name</Label>
+                    <Input
+                      id="postgres-database"
+                      value={formData.postgres?.database || ''}
+                      onChange={(e) => handlePostgresChange('database', e.target.value)}
+                      placeholder="printer_dashboard"
+                      disabled
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="postgres-username">Username</Label>
+                      <Input
+                        id="postgres-username"
+                        value={formData.postgres?.username || ''}
+                        onChange={(e) => handlePostgresChange('username', e.target.value)}
+                        placeholder="postgres"
+                        disabled
+                      />
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="postgres-password">Password</Label>
+                      <Input
+                        id="postgres-password"
+                        type="password"
+                        value={formData.postgres?.password || ''}
+                        onChange={(e) => handlePostgresChange('password', e.target.value)}
+                        placeholder="password"
+                        disabled
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="postgres-ssl"
+                      checked={formData.postgres?.ssl || false}
+                      onCheckedChange={(checked) => handlePostgresChange('ssl', checked)}
+                      disabled
+                    />
+                    <Label htmlFor="postgres-ssl">Enable SSL</Label>
+                  </div>
+                  
+                  <div className="text-sm text-muted-foreground bg-orange-50 p-3 rounded-md border border-orange-200">
+                    <p className="font-medium text-orange-800">PostgreSQL Support Coming Soon</p>
+                    <p className="text-orange-700">Direct PostgreSQL connections are planned for a future release. Please use Supabase for now.</p>
+                  </div>
+                </div>
+              )}
               
-              <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded-md border border-blue-200">
-                <p className="font-medium text-blue-800">Configuration Info</p>
-                <p className="text-blue-700">Configure your own Supabase project credentials to use your own database. Changes will reload the application.</p>
+              {/* Action Buttons */}
+              <div className="flex gap-2 pt-4">
+                <Button 
+                  onClick={handleTestConnection} 
+                  variant="outline" 
+                  size="sm"
+                  disabled={isTestingConnection || !validateConfig()}
+                >
+                  <TestTube className="h-4 w-4 mr-2" />
+                  {isTestingConnection ? 'Testing...' : 'Test Connection'}
+                </Button>
+                <Button onClick={handleSave} size="sm" disabled={!!validateConfig()}>
+                  <Save className="h-4 w-4 mr-2" />
+                  Save Configuration
+                </Button>
+                <Button onClick={handleReset} variant="outline" size="sm">
+                  <RotateCcw className="h-4 w-4 mr-2" />
+                  Clear Configuration
+                </Button>
               </div>
             </CardContent>
           </Card>
