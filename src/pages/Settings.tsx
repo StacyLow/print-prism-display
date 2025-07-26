@@ -204,10 +204,10 @@ export default function Settings() {
                     <RadioGroupItem value="supabase" id="supabase" />
                     <Label htmlFor="supabase">Supabase (Recommended)</Label>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="postgres" id="postgres" />
-                    <Label htmlFor="postgres">Direct PostgreSQL Connection (Coming Soon)</Label>
-                  </div>
+                   <div className="flex items-center space-x-2">
+                     <RadioGroupItem value="postgres" id="postgres" />
+                     <Label htmlFor="postgres">Direct PostgreSQL Connection</Label>
+                   </div>
                 </RadioGroup>
               </div>
 
@@ -260,8 +260,7 @@ export default function Settings() {
                         id="postgres-host"
                         value={formData.postgres?.host || ''}
                         onChange={(e) => handlePostgresChange('host', e.target.value)}
-                        placeholder="localhost"
-                        disabled
+                         placeholder="localhost"
                       />
                     </div>
                     
@@ -272,8 +271,7 @@ export default function Settings() {
                         type="number"
                         value={formData.postgres?.port || 5432}
                         onChange={(e) => handlePostgresChange('port', parseInt(e.target.value))}
-                        placeholder="5432"
-                        disabled
+                         placeholder="5432"
                       />
                     </div>
                   </div>
@@ -284,8 +282,7 @@ export default function Settings() {
                       id="postgres-database"
                       value={formData.postgres?.database || ''}
                       onChange={(e) => handlePostgresChange('database', e.target.value)}
-                      placeholder="printer_dashboard"
-                      disabled
+                       placeholder="printer_dashboard"
                     />
                   </div>
                   
@@ -296,8 +293,7 @@ export default function Settings() {
                         id="postgres-username"
                         value={formData.postgres?.username || ''}
                         onChange={(e) => handlePostgresChange('username', e.target.value)}
-                        placeholder="postgres"
-                        disabled
+                         placeholder="postgres"
                       />
                     </div>
                     
@@ -308,36 +304,34 @@ export default function Settings() {
                         type="password"
                         value={formData.postgres?.password || ''}
                         onChange={(e) => handlePostgresChange('password', e.target.value)}
-                        placeholder="password"
-                        disabled
+                         placeholder="password"
                       />
                     </div>
                   </div>
                   
                   <div className="flex items-center space-x-2">
-                    <Switch
-                      id="postgres-ssl"
-                      checked={formData.postgres?.ssl || false}
-                      onCheckedChange={(checked) => handlePostgresChange('ssl', checked)}
-                      disabled
-                    />
+                     <Switch
+                       id="postgres-ssl"
+                       checked={formData.postgres?.ssl || false}
+                       onCheckedChange={(checked) => handlePostgresChange('ssl', checked)}
+                     />
                     <Label htmlFor="postgres-ssl">Enable SSL</Label>
                   </div>
                   
-                  <div className="text-sm text-muted-foreground bg-orange-50 p-3 rounded-md border border-orange-200">
-                    <p className="font-medium text-orange-800">PostgreSQL Support Coming Soon</p>
-                    <p className="text-orange-700">Direct PostgreSQL connections are planned for a future release. Please use Supabase for now.</p>
-                  </div>
+                   <div className="text-sm text-muted-foreground bg-blue-50 p-3 rounded-md border border-blue-200">
+                     <p className="font-medium text-blue-800">PostgreSQL Configuration</p>
+                     <p className="text-blue-700">Direct PostgreSQL connections are now supported. Make sure your database has the required tables and structure.</p>
+                   </div>
                 </div>
               )}
               
               {/* Action Buttons */}
               <div className="flex gap-2 pt-4">
-                <Button 
+                  <Button 
                   onClick={handleTestConnection} 
                   variant="outline" 
                   size="sm"
-                  disabled={isTestingConnection || !validateConfig()}
+                  disabled={isTestingConnection || !!validateConfig()}
                 >
                   <TestTube className="h-4 w-4 mr-2" />
                   {isTestingConnection ? 'Testing...' : 'Test Connection'}

@@ -48,6 +48,31 @@ export class DatabaseClient {
     throw new Error('No valid database client available');
   }
 
+  // Unified interface for database operations
+  async select(table: string, columns = '*', filters?: Record<string, any>) {
+    if (this.config.type === 'supabase' && this.supabaseClient) {
+      let query = this.supabaseClient.from(table as any).select(columns);
+      if (filters) {
+        Object.entries(filters).forEach(([key, value]) => {
+          query = query.eq(key, value);
+        });
+      }
+      return await query;
+    } else if (this.config.type === 'postgres' && this.postgresClient) {
+      return await this.postgresClient.select(table, columns, filters);
+    }
+    throw new Error('No valid database client available');
+  }
+
+  async insert(table: string, data: Record<string, any>) {
+    if (this.config.type === 'supabase' && this.supabaseClient) {
+      return await this.supabaseClient.from(table as any).insert(data);
+    } else if (this.config.type === 'postgres' && this.postgresClient) {
+      return await this.postgresClient.insert(table, data);
+    }
+    throw new Error('No valid database client available');
+  }
+
   isConfigured(): boolean {
     if (this.config.type === 'supabase') {
       return !!(this.config.supabase?.url && this.config.supabase?.anonKey);

@@ -7,7 +7,7 @@ import { MetricCard } from "@/components/dashboard/MetricCard";
 import { PrintTimeChart } from "@/components/dashboard/PrintTimeChart";
 import { FilamentUsageChart } from "@/components/dashboard/FilamentUsageChart";
 import { StatusBreakdownChart } from "@/components/dashboard/StatusBreakdownChart";
-import { usePrintMetrics, useChartData, useFilamentTypes, usePrinters } from "@/hooks/usePrintData";
+import { usePrintMetrics, useChartData, useFilamentTypes, usePrinters } from "@/hooks/usePrintHooks";
 import { FilterState } from "@/types/printJob";
 import { 
   Clock, 
