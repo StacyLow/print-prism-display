@@ -94,7 +94,32 @@ export class PostgresClient {
       const queryString = params.toString();
       const endpoint = `/api/metrics${queryString ? `?${queryString}` : ''}`;
       
-      return await this.makeRequest(endpoint);
+      const result = await this.makeRequest(endpoint);
+      
+      // Transform snake_case to camelCase to match frontend interface
+      return {
+        totalPrintTime: result.total_print_time || 0,
+        totalFilamentLength: result.total_filament_length || 0,
+        totalFilamentWeight: result.total_filament_weight || 0,
+        successRate: result.success_rate || 0,
+        totalJobs: result.total_jobs || 0,
+        avgPrintTime: result.total_jobs > 0 ? (result.total_print_time || 0) / result.total_jobs : 0,
+        statusBreakdown: {
+          completed: result.completed_jobs || 0,
+          cancelled: result.status_breakdown?.find((s: any) => s.status === 'cancelled')?.count || 0,
+          interrupted: result.status_breakdown?.find((s: any) => s.status === 'interrupted')?.count || 0,
+          server_exit: result.status_breakdown?.find((s: any) => s.status === 'server_exit')?.count || 0,
+          klippy_shutdown: result.status_breakdown?.find((s: any) => s.status === 'klippy_shutdown')?.count || 0,
+          in_progress: result.status_breakdown?.find((s: any) => s.status === 'in_progress')?.count || 0
+        },
+        mostUsedFilament: {
+          type: result.most_used_filament || 'N/A',
+          count: result.filament_usage?.[0]?.count || 0,
+          percentage: result.total_jobs > 0 && result.filament_usage?.[0]?.count 
+            ? Math.round((result.filament_usage[0].count / result.total_jobs * 100) * 10) / 10 
+            : 0
+        }
+      };
     } catch (error) {
       throw new Error(error instanceof Error ? error.message : 'Failed to get metrics');
     }
