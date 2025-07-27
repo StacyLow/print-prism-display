@@ -54,7 +54,18 @@ export class DatabaseClient {
       let query = this.supabaseClient.from(table as any).select(columns);
       if (filters) {
         Object.entries(filters).forEach(([key, value]) => {
-          query = query.eq(key, value);
+          // Handle date range filters specially
+          if (key === 'start_date') {
+            query = query.gte('print_start', value);
+          } else if (key === 'end_date') {
+            query = query.lte('print_start', value);
+          } else if (Array.isArray(value) && value.length > 0) {
+            // Handle array filters (e.g., filament types, printers)
+            query = query.in(key, value);
+          } else if (value !== null && value !== undefined && value !== '') {
+            // Handle regular equality filters, skip null/empty values
+            query = query.eq(key, value);
+          }
         });
       }
       return await query;

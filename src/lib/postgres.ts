@@ -37,11 +37,15 @@ export class PostgresClient {
         const params = new URLSearchParams();
         if (filters) {
           Object.entries(filters).forEach(([key, value]) => {
-            if (value !== undefined && value !== null) {
-              if (Array.isArray(value)) {
-                // Handle arrays by sending as comma-separated values
+            if (value !== undefined && value !== null && value !== '') {
+              if (key === 'start_date' || key === 'end_date') {
+                // Handle date range filters
+                params.append(key, String(value));
+              } else if (Array.isArray(value) && value.length > 0) {
+                // Handle array filters by sending as comma-separated values
                 params.append(key, value.join(','));
               } else {
+                // Handle regular filters
                 params.append(key, String(value));
               }
             }
@@ -51,7 +55,8 @@ export class PostgresClient {
         const queryString = params.toString();
         const endpoint = `/api/print-jobs${queryString ? `?${queryString}` : ''}`;
         
-        return await this.makeRequest(endpoint);
+        const result = await this.makeRequest(endpoint);
+        return { data: result, error: null };
       }
       
       throw new Error(`Table ${table} not supported yet`);

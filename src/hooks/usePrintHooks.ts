@@ -21,21 +21,28 @@ export const usePrintJobs = (filters: FilterState) => {
       // Build filters for the query
       const queryFilters: Record<string, any> = {};
       
-      // Handle multiple printers
-      if (filters.printers?.length) {
-        queryFilters.printer_names = filters.printers;
-      }
-      
-      // Handle multiple filament types
-      if (filters.filamentTypes?.length) {
-        queryFilters.filament_types = filters.filamentTypes;
-      }
-      
-      // Convert date range to actual dates
+      // Convert date range to actual dates first
       if (filters.dateRange) {
         const dateFilter = convertDateRangeToFilter(filters.dateRange);
         queryFilters.start_date = dateFilter.start_date;
         queryFilters.end_date = dateFilter.end_date;
+      }
+      
+      // Handle multiple printers - use correct field names
+      if (filters.printers?.length) {
+        // Filter out null/empty values
+        const validPrinters = filters.printers.filter(p => p && p.trim() !== '');
+        if (validPrinters.length > 0) {
+          queryFilters.printer_name = validPrinters;
+        }
+      }
+      
+      // Handle multiple filament types - use correct field names
+      if (filters.filamentTypes?.length) {
+        const validTypes = filters.filamentTypes.filter(t => t && t.trim() !== '');
+        if (validTypes.length > 0) {
+          queryFilters.filament_type = validTypes;
+        }
       }
       
       console.log('usePrintJobs - Query filters:', queryFilters);
