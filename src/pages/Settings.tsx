@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
-import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, XCircle, Save, RotateCcw, TestTube, AlertTriangle, Info } from "lucide-react";
+import { ArrowLeft, Database, Settings as SettingsIcon, CheckCircle, XCircle, Save, RotateCcw, TestTube, AlertTriangle, Info, RefreshCw, TrendingUp, Calendar, Activity } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDatabaseConfig } from "@/hooks/useDatabaseConfig";
+import { useCacheManagement } from "@/hooks/useCacheManagement";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { DatabaseConfig, DatabaseType } from "@/types/database";
@@ -14,9 +15,12 @@ import { createDatabaseClient } from "@/lib/database";
 
 export default function Settings() {
   const { config, updateConfig, resetToEmpty, isConfigured } = useDatabaseConfig();
+  const { formatCacheInfo, isRebuilding, rebuildCache, getCacheHealth } = useCacheManagement();
   const { toast } = useToast();
   const [formData, setFormData] = useState<DatabaseConfig>(config);
   const [isTestingConnection, setIsTestingConnection] = useState(false);
+  
+  const cacheInfo = formatCacheInfo();
 
   const handleTypeChange = (type: DatabaseType) => {
     setFormData(prev => ({ ...prev, type }));
@@ -357,6 +361,134 @@ export default function Settings() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Cache Management (PostgreSQL only) */}
+          {config.type === 'postgres' && isConfigured && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5" />
+                  Cache Management
+                </CardTitle>
+                <CardDescription>
+                  Manage your metrics cache for improved performance
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Cache Status */}
+                {cacheInfo && (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2">
+                      {cacheInfo.health === 'healthy' && (
+                        <>
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <span className="text-sm font-medium">Cache Healthy</span>
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">
+                            {cacheInfo.totalEntries} entries
+                          </span>
+                        </>
+                      )}
+                      {cacheInfo.health === 'empty' && (
+                        <>
+                          <XCircle className="h-4 w-4 text-red-600" />
+                          <span className="text-sm font-medium">Cache Empty</span>
+                          <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                            No cache entries
+                          </span>
+                        </>
+                      )}
+                      {cacheInfo.health === 'needs_rebuild' && (
+                        <>
+                          <AlertTriangle className="h-4 w-4 text-orange-600" />
+                          <span className="text-sm font-medium">Cache Needs Rebuild</span>
+                          <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">
+                            {cacheInfo.coverage}% coverage
+                          </span>
+                        </>
+                      )}
+                    </div>
+
+                    {/* Cache Statistics */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="bg-card border rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <Activity className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Total Entries</span>
+                        </div>
+                        <p className="text-lg font-bold mt-1">{cacheInfo.totalEntries}</p>
+                      </div>
+                      
+                      <div className="bg-card border rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Daily Cache</span>
+                        </div>
+                        <p className="text-lg font-bold mt-1">{cacheInfo.dailyEntries}</p>
+                      </div>
+                      
+                      <div className="bg-card border rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Overall Cache</span>
+                        </div>
+                        <p className="text-lg font-bold mt-1">{cacheInfo.overallEntries}</p>
+                      </div>
+                      
+                      <div className="bg-card border rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <Database className="h-4 w-4 text-muted-foreground" />
+                          <span className="text-sm font-medium">Print Jobs</span>
+                        </div>
+                        <p className="text-lg font-bold mt-1">{cacheInfo.printJobsTotal}</p>
+                      </div>
+                    </div>
+
+                    {/* Cache Information */}
+                    <div className="space-y-2 text-sm text-muted-foreground">
+                      {cacheInfo.lastUpdated && (
+                        <p>Last updated: {cacheInfo.lastUpdated.toLocaleString()}</p>
+                      )}
+                      {cacheInfo.dateRange && (
+                        <p>
+                          Date range: {cacheInfo.dateRange.start.toLocaleDateString()} - {cacheInfo.dateRange.end.toLocaleDateString()}
+                        </p>
+                      )}
+                      <p>Cache coverage: {cacheInfo.coverage}% of print jobs</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cache Actions */}
+                <div className="flex gap-2 pt-4">
+                  <Button 
+                    onClick={rebuildCache}
+                    variant="outline" 
+                    size="sm"
+                    disabled={isRebuilding}
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isRebuilding ? 'animate-spin' : ''}`} />
+                    {isRebuilding ? 'Rebuilding...' : 'Rebuild Cache'}
+                  </Button>
+                </div>
+
+                {/* Cache Information Box */}
+                <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                  <div className="flex items-start">
+                    <Info className="h-5 w-5 text-blue-600 dark:text-blue-400 mt-0.5 mr-2 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                        About Cache Management
+                      </h4>
+                      <p className="text-sm text-blue-700 dark:text-blue-300">
+                        The metrics cache improves dashboard performance by pre-calculating aggregated data. 
+                        If your metrics seem outdated or you've imported new data, rebuild the cache to ensure accuracy.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

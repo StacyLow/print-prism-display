@@ -305,6 +305,199 @@ app.get('/api/printers', async (req, res) => {
   }
 });
 
+// Get cache status
+app.get('/api/cache-status', async (req, res) => {
+  try {
+    const dbConfigHeader = req.headers['x-db-config'];
+    if (!dbConfigHeader) {
+      return res.status(400).json({ error: 'Database configuration required' });
+    }
+
+    const config = JSON.parse(dbConfigHeader);
+    const pool = createDbConnection(config);
+    
+    const cacheQuery = `
+      SELECT 
+        COUNT(*) as total_entries,
+        MIN(date_start) as earliest_date,
+        MAX(date_end) as latest_date,
+        MAX(updated_at) as last_updated,
+        COUNT(CASE WHEN cache_key LIKE 'overall_%' THEN 1 END) as overall_entries,
+        COUNT(CASE WHEN cache_key LIKE 'daily_%' THEN 1 END) as daily_entries
+      FROM metrics_cache
+    `;
+    
+    const printJobsQuery = `
+      SELECT 
+        COUNT(*) as total_print_jobs,
+        MIN(print_start) as earliest_job,
+        MAX(print_start) as latest_job
+      FROM print_jobs
+    `;
+    
+    const [cacheResult, printJobsResult] = await Promise.all([
+      pool.query(cacheQuery),
+      pool.query(printJobsQuery)
+    ]);
+    
+    const cache = cacheResult.rows[0];
+    const jobs = printJobsResult.rows[0];
+    
+    const response = {
+      cache: {
+        total_entries: parseInt(cache.total_entries) || 0,
+        overall_entries: parseInt(cache.overall_entries) || 0,
+        daily_entries: parseInt(cache.daily_entries) || 0,
+        earliest_date: cache.earliest_date,
+        latest_date: cache.latest_date,
+        last_updated: cache.last_updated
+      },
+      print_jobs: {
+        total: parseInt(jobs.total_print_jobs) || 0,
+        earliest: jobs.earliest_job,
+        latest: jobs.latest_job
+      }
+    };
+    
+    await pool.end();
+    res.json(response);
+  } catch (error) {
+    console.error('Error fetching cache status:', error);
+    res.status(500).json({ error: `Failed to fetch cache status: ${error.message}` });
+  }
+});
+
+// Rebuild cache
+app.post('/api/rebuild-cache', async (req, res) => {
+  try {
+    const dbConfigHeader = req.headers['x-db-config'];
+    if (!dbConfigHeader) {
+      return res.status(400).json({ error: 'Database configuration required' });
+    }
+
+    const config = JSON.parse(dbConfigHeader);
+    const pool = createDbConnection(config);
+    
+    // First, clear existing cache
+    await pool.query('DELETE FROM metrics_cache');
+    
+    // Create stored procedure for cache rebuild if it doesn't exist
+    const createProcedureQuery = `
+      CREATE OR REPLACE FUNCTION rebuild_metrics_cache()
+      RETURNS void AS $$
+      DECLARE
+        job_record RECORD;
+        daily_key TEXT;
+        overall_key TEXT;
+      BEGIN
+        -- Process each print job
+        FOR job_record IN 
+          SELECT * FROM print_jobs 
+          WHERE print_start IS NOT NULL 
+          ORDER BY print_start
+        LOOP
+          -- Generate cache keys
+          daily_key := 'daily_' || 
+            COALESCE(job_record.printer_name, 'unknown') || '_' || 
+            COALESCE(job_record.filament_type, 'unknown') || '_' || 
+            TO_CHAR(TO_TIMESTAMP(job_record.print_start), 'YYYY-MM-DD');
+          
+          overall_key := 'overall_' || 
+            COALESCE(job_record.printer_name, 'unknown') || '_' || 
+            COALESCE(job_record.filament_type, 'unknown');
+          
+          -- Update daily cache
+          INSERT INTO metrics_cache (
+            cache_key, printer_name, filament_type, 
+            date_start, date_end,
+            total_print_time, total_filament_length, total_filament_weight,
+            job_count, completed_jobs, failed_jobs
+          )
+          VALUES (
+            daily_key, job_record.printer_name, job_record.filament_type,
+            DATE_TRUNC('day', TO_TIMESTAMP(job_record.print_start)),
+            DATE_TRUNC('day', TO_TIMESTAMP(job_record.print_start)) + INTERVAL '1 day' - INTERVAL '1 second',
+            COALESCE(job_record.total_duration, 0) / 60.0, -- Convert to minutes
+            COALESCE(job_record.filament_total, 0) / 1000.0, -- Convert to meters
+            COALESCE(job_record.filament_weight, 0),
+            1,
+            CASE WHEN job_record.status = 'completed' THEN 1 ELSE 0 END,
+            CASE WHEN job_record.status IN ('cancelled', 'interrupted', 'server_exit', 'klippy_shutdown') THEN 1 ELSE 0 END
+          )
+          ON CONFLICT (cache_key) DO UPDATE SET
+            total_print_time = metrics_cache.total_print_time + EXCLUDED.total_print_time,
+            total_filament_length = metrics_cache.total_filament_length + EXCLUDED.total_filament_length,
+            total_filament_weight = metrics_cache.total_filament_weight + EXCLUDED.total_filament_weight,
+            job_count = metrics_cache.job_count + 1,
+            completed_jobs = metrics_cache.completed_jobs + EXCLUDED.completed_jobs,
+            failed_jobs = metrics_cache.failed_jobs + EXCLUDED.failed_jobs,
+            updated_at = NOW();
+          
+          -- Update overall cache
+          INSERT INTO metrics_cache (
+            cache_key, printer_name, filament_type,
+            total_print_time, total_filament_length, total_filament_weight,
+            job_count, completed_jobs, failed_jobs
+          )
+          VALUES (
+            overall_key, job_record.printer_name, job_record.filament_type,
+            COALESCE(job_record.total_duration, 0) / 60.0, -- Convert to minutes
+            COALESCE(job_record.filament_total, 0) / 1000.0, -- Convert to meters
+            COALESCE(job_record.filament_weight, 0),
+            1,
+            CASE WHEN job_record.status = 'completed' THEN 1 ELSE 0 END,
+            CASE WHEN job_record.status IN ('cancelled', 'interrupted', 'server_exit', 'klippy_shutdown') THEN 1 ELSE 0 END
+          )
+          ON CONFLICT (cache_key) DO UPDATE SET
+            total_print_time = metrics_cache.total_print_time + EXCLUDED.total_print_time,
+            total_filament_length = metrics_cache.total_filament_length + EXCLUDED.total_filament_length,
+            total_filament_weight = metrics_cache.total_filament_weight + EXCLUDED.total_filament_weight,
+            job_count = metrics_cache.job_count + 1,
+            completed_jobs = metrics_cache.completed_jobs + EXCLUDED.completed_jobs,
+            failed_jobs = metrics_cache.failed_jobs + EXCLUDED.failed_jobs,
+            updated_at = NOW();
+        END LOOP;
+      END;
+      $$ LANGUAGE plpgsql;
+    `;
+    
+    await pool.query(createProcedureQuery);
+    
+    // Execute the cache rebuild
+    await pool.query('SELECT rebuild_metrics_cache()');
+    
+    // Get final stats
+    const statsQuery = `
+      SELECT 
+        COUNT(*) as total_entries,
+        COUNT(CASE WHEN cache_key LIKE 'overall_%' THEN 1 END) as overall_entries,
+        COUNT(CASE WHEN cache_key LIKE 'daily_%' THEN 1 END) as daily_entries
+      FROM metrics_cache
+    `;
+    
+    const result = await pool.query(statsQuery);
+    const stats = result.rows[0];
+    
+    await pool.end();
+    
+    res.json({
+      success: true,
+      message: 'Cache rebuilt successfully',
+      stats: {
+        total_entries: parseInt(stats.total_entries) || 0,
+        overall_entries: parseInt(stats.overall_entries) || 0,
+        daily_entries: parseInt(stats.daily_entries) || 0
+      }
+    });
+  } catch (error) {
+    console.error('Error rebuilding cache:', error);
+    res.status(500).json({ 
+      success: false,
+      error: `Failed to rebuild cache: ${error.message}` 
+    });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy' });
