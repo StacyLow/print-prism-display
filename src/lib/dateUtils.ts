@@ -51,7 +51,15 @@ export function groupJobsByDate(jobs: any[], granularity: 'day' | 'week' | 'mont
   const grouped: Record<string, any[]> = {};
 
   jobs.forEach(job => {
-    const date = new Date(job.print_start * 1000); // Convert from Unix timestamp
+    // Handle different date formats - Unix timestamp (int/float) or Date object or string
+    let timestamp = job.print_start;
+    if (typeof timestamp === 'string') {
+      timestamp = new Date(timestamp).getTime() / 1000;
+    } else if (timestamp instanceof Date) {
+      timestamp = timestamp.getTime() / 1000;
+    }
+    
+    const date = new Date(Math.floor(timestamp) * 1000); // Ensure integer timestamp
     let key: string;
 
     switch (granularity) {

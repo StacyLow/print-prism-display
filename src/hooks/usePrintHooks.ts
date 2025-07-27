@@ -46,6 +46,7 @@ export const usePrintJobs = (filters: FilterState) => {
       }
       
       console.log('usePrintJobs - Raw result:', result.data);
+      console.log('usePrintJobs - First job sample:', result.data?.[0]);
       return result.data || [];
     },
     retry: 1,
@@ -170,6 +171,7 @@ export const useChartData = (filters: FilterState) => {
     queryFn: () => {
       console.log('useChartData - Processing jobs:', jobs);
       console.log('useChartData - Jobs length:', jobs?.length);
+      console.log('useChartData - First job sample:', jobs?.[0]);
       if (!jobs || jobs.length === 0) {
         console.log('useChartData - No jobs, returning empty array');
         return [];
@@ -179,6 +181,7 @@ export const useChartData = (filters: FilterState) => {
       console.log('useChartData - Granularity:', granularity);
       const groupedJobs = groupJobsByDate(jobs, granularity);
       console.log('useChartData - Grouped jobs:', groupedJobs);
+      console.log('useChartData - Grouped jobs keys:', Object.keys(groupedJobs));
       
       const chartData: ChartData[] = Object.entries(groupedJobs)
         .map(([date, dateJobs]) => {
