@@ -11,6 +11,7 @@ export const usePrintJobs = (filters: FilterState) => {
   return useQuery({
     queryKey: ['printJobs', filters, config],
     queryFn: async () => {
+      console.log('usePrintJobs - Starting with filters:', filters);
       if (!isConfigured) {
         throw new Error('Database not configured');
       }
@@ -37,12 +38,14 @@ export const usePrintJobs = (filters: FilterState) => {
         queryFilters.end_date = dateFilter.end_date;
       }
       
+      console.log('usePrintJobs - Query filters:', queryFilters);
       const result = await client.select('print_jobs', '*', queryFilters);
       
       if (result.error) {
         throw new Error(result.error);
       }
       
+      console.log('usePrintJobs - Raw result:', result.data);
       return result.data || [];
     },
     retry: 1,
@@ -165,12 +168,17 @@ export const useChartData = (filters: FilterState) => {
   return useQuery({
     queryKey: ['chartData', filters, jobs],
     queryFn: () => {
+      console.log('useChartData - Processing jobs:', jobs);
+      console.log('useChartData - Jobs length:', jobs?.length);
       if (!jobs || jobs.length === 0) {
+        console.log('useChartData - No jobs, returning empty array');
         return [];
       }
 
       const granularity = getChartGranularity(filters.dateRange);
+      console.log('useChartData - Granularity:', granularity);
       const groupedJobs = groupJobsByDate(jobs, granularity);
+      console.log('useChartData - Grouped jobs:', groupedJobs);
       
       const chartData: ChartData[] = Object.entries(groupedJobs)
         .map(([date, dateJobs]) => {
@@ -198,6 +206,7 @@ export const useChartData = (filters: FilterState) => {
         })
         .sort((a, b) => a.date.localeCompare(b.date));
 
+      console.log('useChartData - Final chart data:', chartData);
       return chartData;
     },
     enabled: !!jobs && !isLoading,
