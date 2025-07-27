@@ -81,9 +81,23 @@ app.get('/api/print-jobs', async (req, res) => {
       paramIndex++;
     }
 
+    if (req.query.printer_names) {
+      const printerNames = req.query.printer_names.split(',');
+      query += ` AND printer_name = ANY($${paramIndex})`;
+      params.push(printerNames);
+      paramIndex++;
+    }
+
     if (req.query.filament_type) {
       query += ` AND filament_type = $${paramIndex}`;
       params.push(req.query.filament_type);
+      paramIndex++;
+    }
+
+    if (req.query.filament_types) {
+      const filamentTypes = req.query.filament_types.split(',');
+      query += ` AND filament_type = ANY($${paramIndex})`;
+      params.push(filamentTypes);
       paramIndex++;
     }
 
@@ -144,9 +158,23 @@ app.get('/api/metrics', async (req, res) => {
       paramIndex++;
     }
 
+    if (req.query.printer_names) {
+      const printerNames = req.query.printer_names.split(',');
+      whereClause += ` AND printer_name = ANY($${paramIndex})`;
+      params.push(printerNames);
+      paramIndex++;
+    }
+
     if (req.query.filament_type) {
       whereClause += ` AND filament_type = $${paramIndex}`;
       params.push(req.query.filament_type);
+      paramIndex++;
+    }
+
+    if (req.query.filament_types) {
+      const filamentTypes = req.query.filament_types.split(',');
+      whereClause += ` AND filament_type = ANY($${paramIndex})`;
+      params.push(filamentTypes);
       paramIndex++;
     }
 

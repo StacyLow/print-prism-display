@@ -38,7 +38,12 @@ export class PostgresClient {
         if (filters) {
           Object.entries(filters).forEach(([key, value]) => {
             if (value !== undefined && value !== null) {
-              params.append(key, String(value));
+              if (Array.isArray(value)) {
+                // Handle arrays by sending as comma-separated values
+                params.append(key, value.join(','));
+              } else {
+                params.append(key, String(value));
+              }
             }
           });
         }
@@ -86,7 +91,12 @@ export class PostgresClient {
       if (filters) {
         Object.entries(filters).forEach(([key, value]) => {
           if (value !== undefined && value !== null) {
-            params.append(key, String(value));
+            if (Array.isArray(value)) {
+              // Handle arrays by sending as comma-separated values
+              params.append(key, value.join(','));
+            } else {
+              params.append(key, String(value));
+            }
           }
         });
       }

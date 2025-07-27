@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { PrintJob, MetricData, ChartData, FilterState, isSuccessfulStatus, isFailedStatus, isActiveStatus } from '@/types/printJob';
 import { useDatabaseConfig } from './useDatabaseConfig';
 import { createDatabaseClient } from '@/lib/database';
+import { convertDateRangeToFilter, groupJobsByDate, getChartGranularity } from '@/lib/dateUtils';
 
 // Simple data fetch for compatibility
 export const usePrintJobs = (filters: FilterState) => {
@@ -19,19 +20,22 @@ export const usePrintJobs = (filters: FilterState) => {
       // Build filters for the query
       const queryFilters: Record<string, any> = {};
       
+      // Handle multiple printers
       if (filters.printers?.length) {
-        queryFilters.printer_name = filters.printers[0];
+        queryFilters.printer_names = filters.printers;
       }
       
+      // Handle multiple filament types
       if (filters.filamentTypes?.length) {
-        queryFilters.filament_type = filters.filamentTypes[0];
+        queryFilters.filament_types = filters.filamentTypes;
       }
       
-      // Note: Status filtering might need to be implemented differently
-      // depending on how the FilterState interface defines status
-      
-      // Date range handling would need to be implemented based on 
-      // the actual FilterState interface structure
+      // Convert date range to actual dates
+      if (filters.dateRange) {
+        const dateFilter = convertDateRangeToFilter(filters.dateRange);
+        queryFilters.start_date = dateFilter.start_date;
+        queryFilters.end_date = dateFilter.end_date;
+      }
       
       const result = await client.select('print_jobs', '*', queryFilters);
       
@@ -58,10 +62,30 @@ export const usePrintMetrics = (filters: FilterState) => {
       
       const client = createDatabaseClient(config);
       
+      // Build filters for metrics query
+      const queryFilters: Record<string, any> = {};
+      
+      // Handle multiple printers
+      if (filters.printers?.length) {
+        queryFilters.printer_names = filters.printers;
+      }
+      
+      // Handle multiple filament types
+      if (filters.filamentTypes?.length) {
+        queryFilters.filament_types = filters.filamentTypes;
+      }
+      
+      // Convert date range to actual dates
+      if (filters.dateRange) {
+        const dateFilter = convertDateRangeToFilter(filters.dateRange);
+        queryFilters.start_date = dateFilter.start_date;
+        queryFilters.end_date = dateFilter.end_date;
+      }
+
       if (config.type === 'postgres') {
         // Use the custom metrics method for PostgreSQL
         const postgresClient = client.getClient() as any;
-        return await postgresClient.getMetrics();
+        return await postgresClient.getMetrics(queryFilters);
       } else {
         // Supabase implementation
         const result = await client.select('print_jobs', '*');
@@ -136,16 +160,49 @@ export const usePrintMetrics = (filters: FilterState) => {
 };
 
 export const useChartData = (filters: FilterState) => {
-  const { data: jobs } = usePrintJobs(filters);
+  const { data: jobs, isLoading, error } = usePrintJobs(filters);
   
-  // Return basic chart data structure for compatibility
-  const chartData: ChartData[] = [];
-  
-  return {
-    data: chartData,
-    isLoading: false,
-    error: null
-  };
+  return useQuery({
+    queryKey: ['chartData', filters, jobs],
+    queryFn: () => {
+      if (!jobs || jobs.length === 0) {
+        return [];
+      }
+
+      const granularity = getChartGranularity(filters.dateRange);
+      const groupedJobs = groupJobsByDate(jobs, granularity);
+      
+      const chartData: ChartData[] = Object.entries(groupedJobs)
+        .map(([date, dateJobs]) => {
+          const totalPrintTime = dateJobs.reduce((sum, job) => 
+            sum + (job.total_duration || 0), 0
+          ) / 60; // Convert to minutes
+          
+          const filamentUsed = dateJobs.reduce((sum, job) => 
+            sum + (job.filament_total || 0), 0
+          ) / 1000; // Convert to meters
+          
+          const jobCount = dateJobs.length;
+          const completedJobs = dateJobs.filter(job => 
+            isSuccessfulStatus(job.status)
+          ).length;
+          const successRate = jobCount > 0 ? (completedJobs / jobCount) * 100 : 0;
+          
+          return {
+            date,
+            printTime: Math.round(totalPrintTime * 100) / 100,
+            filamentUsed: Math.round(filamentUsed * 100) / 100,
+            jobCount,
+            successRate: Math.round(successRate * 10) / 10
+          };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date));
+
+      return chartData;
+    },
+    enabled: !!jobs && !isLoading,
+    staleTime: 2 * 60 * 1000,
+  });
 };
 
 export const useFilamentTypes = () => {
