@@ -36,9 +36,38 @@ A modern web application for monitoring and analyzing 3D printing job data with 
    - Enter your Supabase Project URL and Anonymous Key (found in Project Settings → API)
    - Test the connection and save
 
-### Option 2: Direct PostgreSQL (Coming Soon)
+### Option 2: Direct PostgreSQL
 
-Direct PostgreSQL support is planned for a future release.
+1. **Set Up PostgreSQL Database**
+   ```bash
+   # Connect to your PostgreSQL database
+   psql -h your-host -U your-username -d your-database
+   
+   # Or connect to local PostgreSQL
+   psql -U postgres -d printer_dashboard
+   ```
+
+2. **Create Database Schema**
+   ```bash
+   # Run the setup script
+   psql -h your-host -U your-username -d your-database -f setup-database.sql
+   
+   # Or copy and paste the SQL commands manually:
+   psql -h your-host -U your-username -d your-database
+   ```
+
+3. **Configure the Application**
+   - Clone this repository and install dependencies:
+     ```bash
+     git clone <YOUR_GIT_URL>
+     cd <YOUR_PROJECT_NAME>
+     npm install
+     npm run dev
+     ```
+   - Open the application and go to Settings
+   - Select "PostgreSQL" as database type
+   - Enter your PostgreSQL connection details
+   - Test the connection and save
 
 ## Supabase Setup Guide
 
