@@ -73,24 +73,30 @@ export const usePrintMetrics = (filters: FilterState) => {
       
       const client = createDatabaseClient(config);
       
-      // Build filters for metrics query
+      // Build filters for metrics query using same logic as usePrintJobs
       const queryFilters: Record<string, any> = {};
       
-      // Handle multiple printers
-      if (filters.printers?.length) {
-        queryFilters.printer_names = filters.printers;
-      }
-      
-      // Handle multiple filament types
-      if (filters.filamentTypes?.length) {
-        queryFilters.filament_types = filters.filamentTypes;
-      }
-      
-      // Convert date range to actual dates
+      // Convert date range to actual dates first
       if (filters.dateRange) {
         const dateFilter = convertDateRangeToFilter(filters.dateRange);
         queryFilters.start_date = dateFilter.start_date;
         queryFilters.end_date = dateFilter.end_date;
+      }
+      
+      // Handle multiple printers - use correct field names
+      if (filters.printers?.length) {
+        const validPrinters = filters.printers.filter(p => p && p.trim() !== '');
+        if (validPrinters.length > 0) {
+          queryFilters.printer_name = validPrinters;
+        }
+      }
+      
+      // Handle multiple filament types - use correct field names  
+      if (filters.filamentTypes?.length) {
+        const validTypes = filters.filamentTypes.filter(t => t && t.trim() !== '');
+        if (validTypes.length > 0) {
+          queryFilters.filament_type = validTypes;
+        }
       }
 
       if (config.type === 'postgres') {
@@ -98,8 +104,8 @@ export const usePrintMetrics = (filters: FilterState) => {
         const postgresClient = client.getClient() as any;
         return await postgresClient.getMetrics(queryFilters);
       } else {
-        // Supabase implementation
-        const result = await client.select('print_jobs', '*');
+        // Supabase implementation - now with proper filtering
+        const result = await client.select('print_jobs', '*', queryFilters);
         
         if (result.error) {
           throw new Error(result.error);
@@ -240,16 +246,22 @@ export const useFilamentTypes = () => {
         const postgresClient = client.getClient() as any;
         return await postgresClient.getFilamentTypes();
       } else {
-        // Supabase implementation - get distinct filament types
+        // Supabase implementation - get distinct filament types and clean them
         const result = await client.select('print_jobs', 'filament_type');
         
         if (result.error) {
           return ['PLA', 'ABS', 'PETG', 'TPU']; // Default fallback
         }
         
+        const cleanFilamentType = (type: string): string => {
+          if (!type) return '';
+          // Split by semicolon and take the first part, then trim
+          return type.split(';')[0].trim();
+        };
+        
         const types = [...new Set(
           (result.data || [])
-            .map((job: any) => job.filament_type)
+            .map((job: any) => cleanFilamentType(job.filament_type))
             .filter((type: string) => type && type.trim() !== '')
         )].sort();
         
